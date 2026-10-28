@@ -28,4 +28,4 @@
 // сокета и передаёт их в 'close'. Поэтому никакое действие клиента
 // не может уронить процесс через «unhandled 'error' event».
 
-export { connect, listen } from './ws.js';
+export { connect, listen } from './tcp.js';
