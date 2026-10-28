@@ -4,6 +4,10 @@
 `package.json`, подключить зависимости, разбить код на модули и настроить
 инструменты, которые следят за качеством кода.
 
+**Понадобится:** Node.js 22.13 или новее (лучше 24 LTS), терминал, редактор кода, git.
+Если в примерах встретится незнакомая запись (`?.`, `??`, деструктуризация,
+`...`), загляните в [шпаргалку по синтаксису](../js-cheatsheet.md).
+
 **Примерное время:** 1,5–2 часа.
 
 ## Теория
@@ -97,11 +101,14 @@ import os from 'node:os'; // встроенный модуль Node.js
 ### Упражнение 1. Первый проект
 
 1. В папке `sandbox-01` выполните `npm init -y` и посмотрите на `package.json`.
-2. Добавьте в него `"type": "module"`, `"private": true` и
-   `"engines": { "node": ">=22" }`.
-3. Создайте `hello.js`, который выводит версию Node.js, платформу,
+2. Новые версии npm сразу пишут в него `"type": "commonjs"`. **Замените**
+   это значение на `"module"`, а не добавляйте второе поле `type`: при двух
+   одинаковых ключах действует последний, и все `import` сломаются.
+   Если поля `type` нет, добавьте его.
+3. Добавьте `"private": true` и `"engines": { "node": ">=22.13" }`.
+4. Создайте `hello.js`, который выводит версию Node.js, платформу,
    текущую папку и `process.argv`.
-4. Добавьте скрипт `"hello": "node hello.js"` и запустите его
+5. Добавьте скрипт `"hello": "node hello.js"` и запустите его
    командой `npm run hello`.
 
 **Проверка:** в выводе есть строка вида `Node.js v24.19.0 on win32`.
@@ -125,8 +132,9 @@ import os from 'node:os'; // встроенный модуль Node.js
 1. Выполните `npm install ws` и `npm install -D eslint @eslint/js globals prettier`.
 2. Посмотрите, как изменились `package.json` и `node_modules/`.
 3. Создайте `.gitignore` со строкой `node_modules/`.
-4. Удалите `node_modules/` и выполните `npm ci`. Папка восстановится
-   в точности по `package-lock.json`.
+4. Удалите `node_modules/` (`rm -rf node_modules` в bash,
+   `Remove-Item -Recurse -Force node_modules` в PowerShell) и выполните
+   `npm ci`. Папка восстановится в точности по `package-lock.json`.
 
 ### Упражнение 4. ESLint и Prettier
 
@@ -151,10 +159,18 @@ import os from 'node:os'; // встроенный модуль Node.js
 2. Создайте `.prettierrc.json`: `{ "singleQuote": true, "printWidth": 100 }`.
 3. Добавьте скрипты `"lint": "eslint ."`, `"format": "prettier --write ."`
    и `"format:check": "prettier --check ."`.
-4. Испортите `math.js`: объявите неиспользуемую переменную, напишите
-   опечатку в имени (`retrun`), сделайте кривые отступы. Запустите
-   `npm run lint`, затем `npm run format` и снова `npm run lint`.
+4. Испортите `math.js` тремя способами:
+   - объявите неиспользуемую переменную: `const unused = 42;`;
+   - сделайте опечатку в имени переменной: `numbrs.length` вместо `numbers.length`;
+   - собейте отступы и уберите точку с запятой в конце строки.
+
+   Запустите `npm run lint`, затем `npm run format` и снова `npm run lint`.
+   ESLint должен найти `'unused' is assigned a value but never used`
+   (`no-unused-vars`) и `'numbrs' is not defined` (`no-undef`).
    Какие проблемы исправил Prettier, а какие остались для вас?
+
+5. Теперь сделайте синтаксическую ошибку, например `retrun a + b;`.
+   Что скажут ESLint и Prettier? Почему ни один из них не может продолжить работу?
 
 ## Шаг проекта
 
@@ -185,4 +201,5 @@ import os from 'node:os'; // встроенный модуль Node.js
 
 - [package.json](../../package.json), [eslint.config.js](../../eslint.config.js),
   [.prettierrc.json](../../.prettierrc.json), [.gitattributes](../../.gitattributes).
-- Состояние проекта после этого шага: `git checkout step-0`.
+- Каким был эталон на этом шаге: `git show step-0 --stat` (как смотреть историю
+  эталона, см. [labs/README.md](../README.md#история-эталонного-проекта)).

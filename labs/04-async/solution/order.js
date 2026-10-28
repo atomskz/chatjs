@@ -1,19 +1,21 @@
 // Упражнение 1: в каком порядке выполнится код?
-// Сначала весь синхронный код, затем микрозадачи (промисы),
-// затем макрозадачи (таймеры, ввод-вывод, setImmediate).
+// Ответ: A F H D E G, затем C и B в любом порядке.
+//
+// 1. Весь синхронный код: A, F (тело async-функции до первого await), H.
+// 2. Микрозадачи в порядке постановки в очередь: D (.then), E (queueMicrotask),
+//    G (продолжение после await — оно встало в очередь после D и E).
+// 3. Макрозадачи: B (setTimeout 0) и C (setImmediate). Их порядок в главном
+//    модуле не гарантирован: он зависит от того, успел ли истечь 1 мс таймера
+//    к началу цикла событий.
 
-console.log('1: sync start');
-
-setTimeout(() => console.log('7: setTimeout 0'), 0);
-setImmediate(() => console.log('8: setImmediate'));
-
-Promise.resolve().then(() => console.log('4: promise.then'));
-queueMicrotask(() => console.log('5: queueMicrotask'));
-
+console.log('A');
+setTimeout(() => console.log('B'), 0);
+setImmediate(() => console.log('C'));
+Promise.resolve().then(() => console.log('D'));
+queueMicrotask(() => console.log('E'));
 (async () => {
-  console.log('2: inside async function, before await');
+  console.log('F');
   await null;
-  console.log('6: after await');
+  console.log('G');
 })();
-
-console.log('3: sync end');
+console.log('H');

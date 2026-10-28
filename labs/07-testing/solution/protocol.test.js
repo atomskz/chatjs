@@ -41,7 +41,7 @@ describe('isValidNick', () => {
   });
 
   test('rejects everything else', () => {
-    for (const nick of ['', 'a'.repeat(21), 'two words', 'Пётр', 'ann!', 42, null]) {
+    for (const nick of ['', 'a'.repeat(21), 'two words', 'Пётр', 'ann!', 'ann\n', 42, null]) {
       assert.equal(isValidNick(nick), false, String(nick));
     }
   });
@@ -53,12 +53,15 @@ describe('validateText', () => {
   });
 
   test('rejects empty and blank text', () => {
-    assert.match(validateText(''), /empty/);
-    assert.match(validateText('   '), /empty/);
+    assert.equal(validateText(''), 'Message must not be empty');
+    assert.equal(validateText('   '), 'Message must not be empty');
   });
 
   test('counts emoji as one character', () => {
     assert.equal(validateText('😀'.repeat(MAX_TEXT_LENGTH)), null);
-    assert.match(validateText('😀'.repeat(MAX_TEXT_LENGTH + 1)), /longer/);
+    assert.equal(
+      validateText('😀'.repeat(MAX_TEXT_LENGTH + 1)),
+      'Message is longer than 1000 characters',
+    );
   });
 });

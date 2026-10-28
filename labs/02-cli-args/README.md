@@ -5,6 +5,9 @@
 программах: понятный текст в stderr, подсказка по использованию,
 ненулевой код выхода.
 
+**Понадобится:** лабораторная 1. Упражнения делайте в папке `sandbox-02`
+с `package.json`, где есть `"type": "module"`.
+
 **Примерное время:** 1,5 часа.
 
 ## Теория
@@ -48,6 +51,13 @@ const { values } = parseArgs({
   `parseArgs` **выбрасывает исключение** (`error.code` вида
   `ERR_PARSE_ARGS_UNKNOWN_OPTION`). Его нужно поймать в `try/catch`
   и показать пользователю.
+- Флаг, который не передали, приходит как `undefined`, если у него нет `default`.
+- `strict: true` запрещает и лишние слова без флага (`node app.js extra`):
+  «Unexpected argument 'extra'». Если они нужны, добавьте `allowPositionals: true`
+  и читайте их из `positionals`.
+- Значение, которое начинается с минуса, `parseArgs` принимает за флаг:
+  `--times -1` — ошибка «argument is ambiguous». Такое значение пишут
+  через знак равенства: `--times=-1`.
 - Аргументы по умолчанию берутся из `process.argv`. Если передать
   `args: [...]`, функцию удобно проверять на своих массивах.
 
@@ -75,6 +85,23 @@ Number('0x50'); // 80    ← шестнадцатеричная запись
   `0` — успех, всё остальное — ошибка. Скрипты и CI проверяют именно его.
   Посмотреть код последней команды: `echo $?` в bash,
   `$LASTEXITCODE` в PowerShell.
+
+`parseArgs` при ошибке выбрасывает исключение. Пока достаточно знать, что его
+ловят так (подробно об ошибках — в лабораторной 3):
+
+```js
+try {
+  const { values } = parseArgs({ options, strict: true });
+} catch (error) {
+  console.error(`Error: ${error.message}`); // error.message — текст ошибки
+}
+```
+
+Свою ошибку удобно сделать отдельным классом. Одна строка
+`class UsageError extends Error {}` создаёт новый вид ошибки, который
+ведёт себя как обычный `Error`. Выбрасывают её так:
+`throw new UsageError('Option --port is required')`. Проверить, что пойманная
+ошибка именно эта, можно через `error instanceof UsageError`.
 
 Задать код выхода можно двумя способами:
 
@@ -130,6 +157,9 @@ Usage: node server.js --port <1-65535>
 | `node greet.js --name Ann --times 50`   | ошибка про диапазон `--times`              | 1   |
 | `node greet.js --name Ann --colour red` | `Error: Unknown option '--colour'`         | 1   |
 | `node greet.js --name`                  | ошибка «argument missing»                  | 1   |
+| `node greet.js --name Ann --times -1`   | ошибка «argument is ambiguous»             | 1   |
+| `node greet.js --name Ann --times=-1`   | ошибка про диапазон `--times`              | 1   |
+| `node greet.js --name Ann extra`        | ошибка «Unexpected argument 'extra'»       | 1   |
 | `node greet.js -h`                      | только usage                               | 0   |
 
 ### Упражнение 3. Проверка порта
@@ -143,9 +173,15 @@ Usage: node server.js --port <1-65535>
 ### Упражнение 4. `exit` против `exitCode`
 
 Напишите `exit-code.js`. Он ставит таймер, который через 100 мс печатает
-`cleanup done`, а затем, в зависимости от аргумента, вызывает
-`process.exit(1)` или присваивает `process.exitCode = 1`. Запустите
-оба варианта и сравните вывод и код выхода.
+`cleanup done`. Затем, если первый аргумент `exit`, вызывает
+`process.exit(1)`, а иначе присваивает `process.exitCode = 1`.
+
+| команда                  | вывод          | код |
+| ------------------------ | -------------- | --- |
+| `node exit-code.js exit` | ничего         | 1   |
+| `node exit-code.js code` | `cleanup done` | 1   |
+
+Почему в первом случае таймер не сработал?
 
 ## Шаг проекта
 
@@ -154,14 +190,23 @@ Usage: node server.js --port <1-65535>
 
 - `class UsageError extends Error {}`;
 - `parseOptions(options)` — вызывает `parseArgs` с `strict: true`
-  и превращает любую его ошибку в `UsageError`;
+  и возвращает объект `values`, а любую ошибку `parseArgs` превращает
+  в `UsageError` с тем же текстом;
 - `requireOption(values, name)` — возвращает значение или выбрасывает
-  `UsageError('Option --<name> is required')`;
+  `UsageError('Option --<name> is required')`. Пустая строка (`--port=`)
+  тоже считается отсутствующим значением;
 - `parsePort(value)` — из упражнения 3, но выбрасывает `UsageError`.
 
-И заготовку `server.js`: разбирает `--port`, при ошибке печатает
-`Error: ...` и usage с кодом 1, а при успехе пока просто пишет
-`Would listen on port 5000`.
+И заготовку `server.js` с функцией `main()`: она разбирает `--port` через
+эти помощники, при `UsageError` печатает в stderr `Error: ...` и usage
+и ставит код выхода 1, а при успехе пока просто пишет `Would listen on port N`.
+
+| команда                      | вывод                                                                         | код |
+| ---------------------------- | ----------------------------------------------------------------------------- | --- |
+| `node server.js --port 5000` | `Would listen on port 5000`                                                   | 0   |
+| `node server.js`             | `Error: Option --port is required` и `Usage: node server.js --port <1-65535>` | 1   |
+| `node server.js --port abc`  | `Error: Port must be an integer from 1 to 65535, got "abc"` и usage           | 1   |
+| `node server.js --prot 5000` | `Error: Unknown option '--prot'...` и usage                                   | 1   |
 
 ## Контрольные вопросы
 
@@ -178,4 +223,4 @@ Usage: node server.js --port <1-65535>
 - [lib/cli.js](../../lib/cli.js) — `UsageError`, `parseOptions`, `requireOption`, `parsePort`.
 - `parseServerArgs` и `main` в [server.js](../../server.js),
   `parseClientArgs` в [client.js](../../client.js).
-- `git checkout step-3` — первая версия `lib/cli.js`.
+- `git show step-3:lib/cli.js` — первая версия `lib/cli.js`.

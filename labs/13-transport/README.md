@@ -5,9 +5,10 @@
 адаптера и единого набора тестов для всех реализаций. Подключить
 `ChatServer` из лабораторной 8 к настоящей сети.
 
-**Понадобится:** лабораторные 5, 8, 10, 11 и 12.
+**Понадобится:** лабораторные 5, 8, 10, 11 и 12. Работа идёт прямо в проекте
+`chat/`, кроме разминки в упражнении 1.
 
-**Примерное время:** 3–4 часа.
+**Примерное время:** 4–5 часов.
 
 ## Теория
 
@@ -28,6 +29,8 @@
 
 ```
 listen({ port, onConnection }) → Promise<{ port, close() → Promise<void> }>
+  close() перестаёт принимать новые подключения; промис выполнится,
+  когда закроется последнее уже открытое соединение
 connect({ host, port })        → Promise<Connection>
 
 Connection (EventEmitter):
@@ -59,7 +62,16 @@ class TcpConnection extends EventEmitter {
     const splitter = new LineSplitter();
     let lastError = null;
     socket.on('data', (chunk) => {
-      for (const line of splitter.push(chunk)) this.emit('message', line);
+      let lines;
+      try {
+        lines = splitter.push(chunk);
+      } catch (error) {
+        // Строка без '\n' длиннее предела. Исключение в обработчике 'data'
+        // уронило бы весь сервер (лабораторная 5), поэтому рвём только это соединение.
+        socket.destroy(error);
+        return;
+      }
+      for (const line of lines) this.emit('message', line);
     });
     socket.on('error', (error) => {
       lastError = error; // не выпускаем 'error' наружу...
@@ -114,8 +126,10 @@ server.js ──► lib/chat-server.js ──► protocol.js
 Проверить это просто — `ws` и `net` нигде, кроме `transport/`, не встречаются:
 
 ```bash
-git grep -n -E "from '(ws|node:net)'"
+git grep --untracked -n -E "from '(ws|net|node:net)'"
 ```
+
+`--untracked` нужен, чтобы искать и в файлах, которые вы ещё не добавили в git.
 
 ### Тесты контракта
 
@@ -135,7 +149,9 @@ for (const name of TRANSPORT_NAMES) {
 
 ## Упражнения
 
-Решения лежат в [solution/](solution/).
+Решения упражнений 1 и 5 лежат в [solution/](solution/). Решения упражнений 2–4 —
+это файлы эталона [transport/tcp.js](../../transport/tcp.js),
+[transport/ws.js](../../transport/ws.js) и [transport/index.js](../../transport/index.js).
 
 ### Упражнение 1. Разминка: контракт хранилища
 
@@ -155,8 +171,13 @@ for (const name of TRANSPORT_NAMES) {
 - `connect` ставит таймаут подключения 5 секунд и превращает его
   в ошибку `ETIMEDOUT`. После подключения таймаут сбрасывается
   (`setTimeout(0)`);
-- `TcpConnection` режет поток `LineSplitter`-ом. Если строка слишком
-  длинная, соединение уничтожается с этой ошибкой.
+- `TcpConnection` — как в примере из теории: режет поток `LineSplitter`-ом
+  и при слишком длинной строке уничтожает соединение с этой ошибкой;
+- `close()` сервера — `new Promise((resolve) => server.close(() => resolve()))`.
+
+**Проверка:** временный скрипт поднимает `listen({ port: 0, onConnection })`,
+где `onConnection` отвечает эхом на каждое сообщение, подключается через
+`connect` и печатает ответ. Ответ должен прийти на `send('Привет 😀')`.
 
 ### Упражнение 3. WebSocket-транспорт
 
@@ -168,8 +189,14 @@ for (const name of TRANSPORT_NAMES) {
 - `connect` собирает URL `ws://host:port` (IPv6 — в скобках),
   с `handshakeTimeout`;
 - `WsConnection.send` отправляет, только если сокет в состоянии `OPEN`;
-- `close()` закрывает с кодом `1000` и через 2 секунды страхуется
-  `terminate()` с `unref()`.
+- `close()` соединения закрывает с кодом `1000` и через 2 секунды страхуется
+  `terminate()` с `unref()`;
+- `close()` сервера вызывает **и** `wss.close()`, **и** `httpServer.close(callback)`.
+  `wss.close()` не закрывает HTTP-сервер, который ему передали снаружи:
+  без второго вызова порт останется занятым, а промис не выполнится никогда.
+  Промис выполняется в колбэке `httpServer.close`.
+
+Проверка — та же, что в упражнении 2.
 
 ### Упражнение 4. Выбор транспорта
 
@@ -190,31 +217,89 @@ for (const name of TRANSPORT_NAMES) {
 
 ## Шаг проекта
 
-1. Положите в проект транспорт из упражнений 2–4 и его тесты.
-2. Соедините транспорт с логикой в `server.js`:
+1. Положите в проект транспорт из упражнений 2–4 (`transport/`) и тесты
+   контракта из упражнения 5 (`test/transport.test.js`).
+
+2. **Логгер.** В `server.js` заведите функцию `createLogger()`. Она возвращает
+   объект с методами `info`, `warn` и `error` (тот самый интерфейс из
+   лабораторной 8), и каждая строка начинается с времени:
 
    ```js
-   const chat = new ChatServer({ logger });
-   const server = await getTransport(name).listen({
-     port,
-     onConnection: (connection) => chat.handleConnection(connection),
-   });
-   console.log(`Server listening on port ${server.port}`);
+   function createLogger() {
+     const line = (level, text) => `${new Date().toISOString()} ${level.padEnd(5)} ${text}`;
+     return {
+       info: (text) => console.log(line('INFO', text)),
+       warn: (text) => console.warn(line('WARN', text)),
+       error: (text) => console.error(line('ERROR', text)),
+     };
+   }
    ```
 
-   Ошибку `listen` покажите через `describeListenError` и выйдите с кодом 1.
+3. **Флаг `--transport`.** Добавьте в разбор аргументов `server.js` опцию
+   `transport: { type: 'string', default: DEFAULT_TRANSPORT }`. Если значения
+   нет в `TRANSPORT_NAMES`, бросайте `new UsageError('Unknown transport "<имя>"')`.
+   В usage допишите `[--transport ws|tcp]`.
 
-3. Проверьте вручную через `npx wscat -c ws://localhost:5000` все случаи
-   из критериев приёмки ТЗ про мусорные сообщения. Для TCP —
-   `printf '{"type":"join","nick":"nc"}\n{"type":"msg","text":"hi"}\n' | nc localhost 5000`.
-4. **Проверка архитектуры.** Скопируйте из эталонного проекта
-   [test/helpers.js](../../test/helpers.js) и [test/chat.test.js](../../test/chat.test.js)
-   в свой `test/` и запустите `npm test`. Если файлы и контракт совпадают
-   с эталонными, тесты пройдут на обоих транспортах без единой правки.
-   Исключение — тест выключения сервера: `ChatServer.shutdown()` появится
-   в лабораторной 14. До тех пор добавьте в `ChatServer` пустой метод
-   `shutdown() {}` (его вызывает `stop()` в `helpers.js`), и упадёт только
-   этот один тест.
+4. **Соедините части** в `main()` сервера:
+
+   ```js
+   const logger = createLogger();
+   const chat = new ChatServer({ logger });
+   const transport = getTransport(options.transportName);
+
+   let server;
+   try {
+     server = await transport.listen({
+       port: options.port,
+       onConnection: (connection) => chat.handleConnection(connection),
+     });
+   } catch (error) {
+     console.error(`Error: ${describeListenError(error, options.port)}`);
+     process.exitCode = 1;
+     return;
+   }
+   logger.info(`Server listening on port ${server.port} (transport: ${options.transportName})`);
+   ```
+
+   `describeListenError` импортируйте из `lib/errors.js` (лабораторная 3),
+   `getTransport`, `TRANSPORT_NAMES` и `DEFAULT_TRANSPORT` — из `transport/index.js`.
+   Строку `Would listen on port N` из лабораторной 2 уберите.
+
+5. **Проверка вручную.** Запустите `node server.js --port 5000` и пройдите
+   через `npx wscat -c ws://localhost:5000` случаи из критериев приёмки ТЗ
+   про мусорные сообщения (не JSON, JSON без `type`, `msg` до `join`).
+   Затем запустите `node server.js --port 5000 --transport tcp` и проверьте
+   склейку из доп. задания 11.1 с помощью `nc.js` из лабораторной 10:
+
+   ```bash
+   printf '{"type":"join","nick":"nc"}\n{"type":"msg","text":"hi"}\n' | node nc.js localhost 5000
+   ```
+
+   Ожидаемо: `welcome`, а затем `msg` от `nc` — оба сообщения обработаны.
+
+6. **Проверка архитектуры.** Скопируйте из эталонного проекта
+   [test/chat.test.js](../../test/chat.test.js) в свой `test/` и запустите
+   `npm test`. Он использует `startChatServer` и `TestClient` из
+   `test/helpers.js`. Если ваш `helpers.js` из лабораторной 8 отличается,
+   **не заменяйте** его целиком: допишите в него `startChatServer`
+   из эталонного [test/helpers.js](../../test/helpers.js) и проверьте, что
+   у `TestClient` те же методы. Если файлы и контракт совпадают с эталонными,
+   тесты пройдут на обоих транспортах без правок.
+
+   Исключение — тест выключения сервера (по одному на транспорт):
+   `ChatServer.shutdown()` вы напишете в лабораторной 14. `stop()` в `helpers.js`
+   уже вызывает его, поэтому пока добавьте в `ChatServer` временную версию,
+   которая просто закрывает все соединения:
+
+   ```js
+   shutdown() {
+     for (const connection of this.#clients.keys()) connection.close();
+   }
+   ```
+
+   С ней упадут ровно два теста — `warns everyone ... on shutdown (ws)`
+   и `(tcp)`. Совсем пустой `shutdown() {}` не годится: соединения останутся
+   открытыми, `server.close()` не выполнится никогда, и прогон тестов зависнет.
 
 ## Контрольные вопросы
 

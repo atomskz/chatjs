@@ -3,6 +3,14 @@
 
 import readline from 'node:readline';
 
+/** ts в миллисекундах → 'ЧЧ:ММ:СС' (toLocaleTimeString зависит от настроек системы). */
+function formatTime(ts) {
+  const date = new Date(ts);
+  return [date.getHours(), date.getMinutes(), date.getSeconds()]
+    .map((part) => String(part).padStart(2, '0'))
+    .join(':');
+}
+
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const output = process.stdout;
 
@@ -19,7 +27,7 @@ function printAbovePrompt(text) {
 }
 
 const timer = setInterval(() => {
-  printAbovePrompt(`[${new Date().toLocaleTimeString()}] tick`);
+  printAbovePrompt(`[${formatTime(Date.now())}] tick`);
 }, 1000);
 
 rl.setPrompt('> ');

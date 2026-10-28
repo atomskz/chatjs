@@ -17,6 +17,7 @@ function parseUser(json) {
     // Заворачиваем низкоуровневую ошибку в свою, сохраняя исходную в cause.
     throw new ValidationError(null, 'User must be valid JSON', { cause: error });
   }
+  // ?. — защита от правильного, но «пустого» JSON вроде 'null'.
   if (typeof data?.name !== 'string' || data.name === '') {
     throw new ValidationError('name', 'Name is required');
   }
@@ -26,7 +27,13 @@ function parseUser(json) {
   return { name: data.name, age: data.age };
 }
 
-const inputs = ['{"name":"Ann","age":30}', '{"name":"Ann","age":-1}', '{"age":5}', 'not json'];
+const inputs = [
+  '{"name":"Ann","age":30}',
+  '{"name":"Ann","age":-1}',
+  '{"age":5}',
+  'not json',
+  'null', // правильный JSON, но не объект
+];
 
 for (const input of inputs) {
   try {

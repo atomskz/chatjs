@@ -4,7 +4,17 @@
 так, чтобы они не ломали набираемый текст, обрабатывать Ctrl+C и Ctrl+D
 и отделять интерфейс от логики программы.
 
-**Примерное время:** 2 часа.
+**Понадобится:** лабораторная 5 (EventEmitter). Упражнения делайте в папке
+`sandbox-09` с `"type": "module"`.
+
+**Где запускать в Windows.** Интерактивные упражнения (ввод с клавиатуры,
+Ctrl+C, вывод над строкой ввода) запускайте в Windows Terminal, PowerShell
+или cmd. В Git Bash программа иногда не видит терминал: проверьте
+`node -e "console.log(process.stdout.isTTY)"`. Если напечаталось `undefined`,
+запускайте через `winpty node app.js`. Упражнения с конвейером (`printf ... |`),
+наоборот, удобнее делать в Git Bash (см. ниже).
+
+**Примерное время:** 2,5 часа.
 
 ## Теория
 
@@ -19,6 +29,19 @@ node app.js                      # ввод с клавиатуры
 node app.js < input.txt          # ввод из файла
 printf 'a\nb\n' | node app.js    # ввод из конвейера
 ```
+
+В PowerShell то же самое пишется так:
+
+```powershell
+Get-Content input.txt | node app.js   # оператора < в PowerShell нет
+"a", "b" | node app.js                # каждая строка массива — строка ввода
+```
+
+Windows PowerShell 5.1 при передаче текста в программу может испортить
+кириллицу (`?` вместо букв) или добавить в начало невидимый символ BOM.
+Тогда первая строка придёт как `\uFEFFhello`, и сравнение `line === 'exit'`
+или `JSON.parse` сломаются. Упражнения с конвейером делайте в Git Bash
+или PowerShell 7 (`pwsh`).
 
 `process.stdout.isTTY` равно `true`, только если вывод идёт в настоящий
 терминал. Когда вывод в файл, управлять курсором и цветами бессмысленно,
@@ -46,8 +69,11 @@ rl.on('SIGINT', () => {
 
 - Ctrl+D на пустой строке означает «ввод закончился»: придёт `close`.
 - Ctrl+C в интерактивном терминале перехватывает `readline` и испускает
-  `SIGINT`. Если на `rl` нет обработчика `SIGINT`, процесс завершается
-  как обычно.
+  на `rl` событие `SIGINT`. Если обработчика `SIGINT` нет, `readline`
+  просто закрывается (придёт `close`). Процесс завершится, только если его
+  больше ничего не держит: работающий таймер или открытое соединение
+  оставят его жить (лабораторные 4 и 14). Поэтому в упражнении 4 таймер
+  нужно остановить в обработчике `close`.
 - Если ввод не из терминала, Ctrl+C до `readline` не доходит:
   сигнал получает процесс (лабораторная 14).
 
@@ -118,8 +144,16 @@ console.log(styleText(['bold', 'green'], 'you'));
 printf 'hello\nпривет 😀\nexit\nignored\n' | node echo-repl.js
 ```
 
-Ожидаемо: `HELLO`, `ПРИВЕТ 😀`, `Lines: 2. Bye!`, а строки `IGNORED`
-и ошибок быть не должно. Сначала напишите без флага «закрыто»
+Ожидаемо (приглашение `echo> ` печатается и при вводе из конвейера):
+
+```
+echo> HELLO
+echo> ПРИВЕТ 😀
+echo>
+Lines: 2. Bye!
+```
+
+Строки `IGNORED` и ошибок быть не должно. Сначала напишите без флага «закрыто»
 и посмотрите на ловушку 1 своими глазами.
 
 ### Упражнение 2. Вопросы
@@ -150,7 +184,8 @@ printf 'hello\nпривет 😀\nexit\nignored\n' | node echo-repl.js
 
 Создайте `lib/terminal-ui.js` с классом `TerminalUI extends EventEmitter`:
 
-- `constructor({ input = process.stdin, output = process.stdout })`;
+- `constructor({ input = process.stdin, output = process.stdout } = {})` —
+  `= {}`, чтобы работал вызов `new TerminalUI()` без аргументов;
 - события: `line` (text) — введена строка; `quit` — Ctrl+C, Ctrl+D или конец ввода;
 - методы `printChat({ from, text, ts, isOwn })`, `printSystem(text, ts)`,
   `printInfo(text)`, `printError(text)` в формате из раздела 6.2 ТЗ:
@@ -160,16 +195,50 @@ printf 'hello\nпривет 😀\nexit\nignored\n' | node echo-repl.js
   [14:05:20] * bob joined the chat
   ```
 
-  Время берётся из `ts`. Свои сообщения выделяются (`you`, цвет);
+  Время берётся из `ts` (миллисекунды) и форматируется так:
 
-- `close()` — закрыть `readline` и стереть висящее приглашение;
+  ```js
+  function formatTime(ts) {
+    const date = new Date(ts);
+    return [date.getHours(), date.getMinutes(), date.getSeconds()]
+      .map((part) => String(part).padStart(2, '0')) // 5 → '05'
+      .join(':');
+  }
+  ```
+
+  `toLocaleTimeString()` не подойдёт: формат зависит от настроек системы
+  (`2:05:12 PM` в английской локали). Свои сообщения выделяются (`you`, цвет);
+
+- `close()` — закрыть `readline` и стереть висящее приглашение.
+  **Важно:** `quit` означает «пользователь хочет выйти». Если программа
+  закрывает интерфейс сама через `close()`, `quit` испускать нельзя. Иначе
+  в лабораторной 15 получится цикл: соединение закрылось → клиент вызвал
+  `ui.close()` → пришёл `quit` → клиент пытается отправить `leave` в уже
+  закрытое соединение. Заведите флаг `#isClosed` и в обработчике `close`
+  у `readline` испускайте `quit`, только если флаг ещё не поднят;
 - весь вывод — над строкой ввода (упражнение 4), а без терминала — просто строками;
 - после Enter строку `> текст` стоит стереть (`moveCursor` на строку вверх
   и `clearLine`): сервер пришлёт сообщение обратно, и оно появится
   в общей ленте.
 
-Проверьте класс маленьким скриптом: печатайте `printSystem` раз в секунду
-и отвечайте `printChat` на каждую введённую строку.
+Проверьте класс маленьким скриптом `try-ui.js`:
+
+```js
+import { TerminalUI } from './lib/terminal-ui.js';
+
+const ui = new TerminalUI();
+const timer = setInterval(() => ui.printSystem('bob joined the chat'), 1000);
+ui.on('line', (text) => ui.printChat({ from: 'ann', text, ts: Date.now(), isOwn: true }));
+ui.on('quit', () => {
+  clearInterval(timer);
+  ui.printInfo('Bye!');
+  ui.close();
+});
+```
+
+Начните печатать: системные сообщения появляются над строкой ввода,
+а набранный текст остаётся на месте. Ctrl+C печатает `Bye!` и завершает
+программу.
 
 ## Контрольные вопросы
 
@@ -184,4 +253,4 @@ printf 'hello\nпривет 😀\nexit\nignored\n' | node echo-repl.js
 
 - [lib/terminal-ui.js](../../lib/terminal-ui.js) — эталонная реализация.
   Флаг `#isClosed` защищает от ловушки 1.
-- `git checkout step-6` — первый клиент с `readline`.
+- `git show step-6:lib/terminal-ui.js` — первый вариант интерфейса на `readline`.

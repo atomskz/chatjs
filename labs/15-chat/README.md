@@ -5,7 +5,7 @@
 
 **Понадобится:** проект `chat/` после лабораторных 1–14.
 
-**Примерное время:** 4–6 часов.
+**Примерное время:** 6–8 часов.
 
 ## Что уже есть
 
@@ -13,8 +13,10 @@
 | -------------------------------- | ------------ |
 | `package.json`, ESLint, Prettier | 1            |
 | `lib/cli.js`                     | 2, 3         |
+| `lib/errors.js`                  | 3, 10        |
 | `protocol.js`                    | 6            |
-| тесты и `npm test`               | 7            |
+| тесты и `npm test`               | 7, 8, 13     |
+| `test/fake-connection.js`        | 5            |
 | `lib/chat-server.js`             | 8, 14        |
 | `lib/terminal-ui.js`             | 9            |
 | `transport/` (ws и tcp)          | 11, 13       |
@@ -31,53 +33,197 @@
 ## Шаг 1. Логика клиента: `lib/chat-client.js`
 
 Класс `ChatClient({ connection, ui, nick })` связывает соединение
-и интерфейс, но не знает ни про WebSocket, ни про `readline`:
+и интерфейс, но не знает ни про WebSocket, ни про `readline`. Это самый
+большой кусок курса, поэтому он, как сервер в лабораторной 8, разбит
+на ступени с готовыми тестами в папке [tests/](tests/).
 
-- `run()` отправляет `join`, подписывается на соединение и интерфейс
-  и возвращает **промис с кодом выхода**, который выполнится при закрытии
-  соединения (лабораторные 4 и 14);
-- `quit()` отправляет `leave` и закрывает соединение;
-- ввод пользователя: пустые строки игнорируются; `/users`, `/quit`
-  и `/help` — команды; неизвестная команда — локальная ошибка, на сервер
-  не уходит; остальное проверяется `validateText` и отправляется как `msg`;
-- сообщения сервера: `welcome`, `error`, `msg` (свои выделяются),
-  `system`, `users`. Неизвестные типы молча пропускаются: так старый
-  клиент не сломается, если у сервера появятся новые сообщения.
+### Конечный автомат
 
-Удобно описать клиент как **конечный автомат** с состояниями:
+У клиента есть **состояние** — одно поле `#state`, которое говорит,
+на каком этапе он находится. Одно и то же событие в разных состояниях
+значит разное: `error` до входа — «войти не удалось, выходим», а после
+входа — «сообщение не прошло, показать и работать дальше». Закрытие
+соединения после `/quit` — штатный выход с кодом 0, а без `/quit` — обрыв
+с кодом 1.
 
+Такой код пишут как **конечный автомат**: перечисляют состояния и для
+каждой пары «состояние + событие» решают, что делать и куда перейти.
+В коде это поле `#state` плюс `if` или `switch` по нему в обработчиках событий.
+
+| состояние | что значит                    |
+| --------- | ----------------------------- |
+| `joining` | отправили `join`, ждём ответа |
+| `joined`  | в чате                        |
+| `leaving` | пользователь выходит сам      |
+| `failed`  | сервер отказал во входе       |
+
+| состояние           | событие            | действие                                  | новое состояние |
+| ------------------- | ------------------ | ----------------------------------------- | --------------- |
+| `joining`           | пришёл `welcome`   | приветствие и список участников           | `joined`        |
+| `joining`           | пришёл `error`     | `Cannot join: ...`, закрыть соединение    | `failed`        |
+| `joining`, `joined` | `/quit`, Ctrl+C    | отправить `leave`, закрыть соединение     | `leaving`       |
+| `joined`            | пришёл `error`     | показать ошибку                           | `joined`        |
+| `leaving`           | пришёл `welcome`   | ничего (ответ опоздал)                    | `leaving`       |
+| `leaving`, `failed` | `/quit`, Ctrl+C    | ничего (уже выходим)                      | без изменений   |
+| `leaving`           | соединение закрыто | `Bye!`, код выхода 0                      | —               |
+| `failed`            | соединение закрыто | код выхода 1                              | —               |
+| `joining`, `joined` | соединение закрыто | `Connection to server lost`, код выхода 1 | —               |
+
+Строку `leaving + welcome` легко забыть. Без неё клиент, который вышел,
+не дождавшись ответа сервера, вернётся в `joined` и сочтёт своё же
+закрытие обрывом.
+
+### Каркас
+
+```js
+import { ClientMessage, decode, encode, validateText } from '../protocol.js';
+
+const HELP = [
+  'Commands:',
+  '  /users  show online users',
+  '  /quit   leave the chat (same as Ctrl+C)',
+  '  /help   show this help',
+].join('\n');
+
+export class ChatClient {
+  #connection;
+  #ui;
+  #nick;
+  #state = 'joining';
+
+  constructor({ connection, ui, nick }) {}
+
+  /** Подписывается на события, отправляет join. Промис выполнится кодом выхода. */
+  run() {
+    return new Promise((resolve) => {
+      // connection 'message' → #handleServerText(text)
+      // connection 'close'   → посчитать код выхода, ui.close(), resolve(код)
+      // ui 'line'            → #handleInput(line)
+      // ui 'quit'            → this.quit()
+      // и отправить ClientMessage.join(nick)
+    });
+  }
+
+  quit() {} // leave + close, если состояние не leaving и не failed
+  #exitCodeOnClose() {} // switch по #state — последние три строки таблицы
+  #handleInput(line) {} // пустая строка, команда или текст
+  #runCommand(input) {} // /users, /quit, /help или неизвестная
+  #handleServerText(text) {} // decode + switch по message.type
+  #send(message) {} // connection.send(encode(message))
+}
 ```
-joining ──welcome──► joined ──/quit, Ctrl+C──► leaving ──close──► код 0
-   │                    │
- error                close (сервер упал)
-   ▼                    ▼
- failed ──close──► код 1        «Connection to server lost», код 1
-```
 
-Код выхода и сообщение при закрытии зависят только от состояния,
-в котором клиент был в этот момент.
+`ui.close()` при закрытии соединения обязателен: `readline` держит ввод
+открытым, и без этого процесс клиента не завершится (лабораторная 14).
 
-**Тесты.** Клиента можно проверить без сети и терминала: соединение —
-пара в памяти из лабораторной 5, а интерфейс — поддельный класс
-с теми же методами, который записывает, что клиент хотел показать.
-Пример — [solution/chat-client.test.js](solution/chat-client.test.js).
-Проверьте вход, отправку и вывод сообщений, неизвестную команду,
-`/quit` с кодом 0, отказ во входе и обрыв связи с кодом 1.
+### Подготовка
+
+Скопируйте в `chat/test/` файл [tests/client-setup.js](tests/client-setup.js).
+В нём:
+
+- `FakeUI` — поддельный интерфейс с теми же методами, что у `TerminalUI`.
+  Вывод копится в массив `printed`;
+- `startClient()` — соединяет клиент с `TestClient` через пару в памяти.
+
+В этих тестах `TestClient` играет роль сервера: читает, что прислал клиент,
+и сам отправляет ему серверные сообщения.
+
+### Ступень 1. Вход
+
+Тест: [chat-client-1-join.test.js](tests/chat-client-1-join.test.js).
+
+- `run()` сразу отправляет `join`;
+- `welcome` → `printSystem('Welcome, <nick>! Type /help for commands')`
+  и `printInfo('Online (<число>): <ники через запятую и пробел>')`;
+- `error` в состоянии `joining` → `printError('Cannot join: <message> (<code>)')`
+  и закрыть соединение; при закрытии — код 1.
+
+### Ступень 2. Сообщения
+
+Тест: [chat-client-2-messages.test.js](tests/chat-client-2-messages.test.js).
+
+- ввод: строка из одних пробелов — игнорировать. Иначе `validateText` (та же
+  проверка, что на сервере): при проблеме `printError(problem)` и ничего
+  не отправлять, иначе `ClientMessage.msg(line)`;
+- `msg` → `printChat({ ...message, isOwn: message.from === nick })`;
+- `system` → `printSystem(text, ts)`, `users` → `printInfo('Online (...)')`;
+- `error` в состоянии `joined` → `printError(message)`;
+- строку не удалось разобрать `decode` → `printError('Received a malformed message from the server')`;
+- неизвестный `type` — молча пропустить: так старый клиент не сломается,
+  если у сервера появятся новые сообщения.
+
+### Ступень 3. Команды
+
+Тест: [chat-client-3-commands.test.js](tests/chat-client-3-commands.test.js).
+
+Строка, которая начинается с `/`, — команда. Её имя — первое слово:
+`input.split(/\s+/)[0]`.
+
+| команда   | действие                                                                                               |
+| --------- | ------------------------------------------------------------------------------------------------------ |
+| `/users`  | отправить `ClientMessage.list()`; ответ `users` напечатает код из ступени 2                            |
+| `/help`   | `printInfo(HELP)`                                                                                      |
+| `/quit`   | `quit()`                                                                                               |
+| остальные | `printError('Unknown command <имя>. Type /help for the list of commands')`, на сервер ничего не уходит |
+
+Список участников клиент не хранит: `/users` каждый раз спрашивает сервер,
+поэтому список всегда актуален.
+
+### Ступень 4. Выход и коды выхода
+
+Тест: [chat-client-4-exit.test.js](tests/chat-client-4-exit.test.js).
+
+Это строки таблицы автомата про `/quit`, опоздавший `welcome` и закрытие
+соединения. При закрытии сообщение (`printInfo('Bye!')` или
+`printError('Connection to server lost')`) и код выхода зависят
+от состояния. После этого — `ui.close()` и `resolve(код)`.
+
+Эталон — [lib/chat-client.js](../../lib/chat-client.js).
 
 ## Шаг 2. Точка входа клиента: `client.js`
 
-1. Разобрать `--host`, `--port`, `--nick` (и `--transport`) через `lib/cli.js`;
-   при ошибке — usage и код 1. Ник проверяется `isValidNick` ещё до подключения.
-2. Подключиться через `getTransport(name).connect(...)`. При ошибке —
-   `describeConnectError` и код 1.
-3. Создать `TerminalUI` и `ChatClient`, подписать `process.once('SIGINT', ...)`
-   на `client.quit()` (для ввода не из терминала, лабораторная 14).
-4. `process.exitCode = await client.run()`.
+Устройство такое же, как у `server.js` (лабораторные 2, 3 и 13): функция `main()`
+и её вызов в конце файла.
 
-## Шаг 3. Флаг `--transport`
+1. Разобрать `--host`, `--port`, `--nick` и `--transport` (по умолчанию `ws`)
+   через `lib/cli.js`. При `UsageError` — сообщение, usage и код 1. Usage
+   показывает правило для ника (`NICK_RULES`) и пример:
 
-Добавьте в `server.js` и `client.js` флаг `--transport ws|tcp` (по умолчанию `ws`).
-Это единственное место, где выбирается реализация транспорта.
+   ```
+   Usage: node client.js --host <address> --port <1-65535> --nick <nickname> [--transport ws|tcp]
+     nickname: 1-20 characters: latin letters, digits, "_" or "-"
+   Example: node client.js --host 192.168.1.10 --port 5000 --nick alice
+   ```
+
+   Ник проверяется `isValidNick` ещё до подключения: незачем ехать
+   к серверу с заведомо плохим ником.
+
+2. Подключиться: `await getTransport(name).connect({ host, port })` в `try/catch`.
+   При ошибке — `Cannot connect to <host>:<port>: <describeConnectError(error)>`
+   (функция из `lib/errors.js`, лабораторная 10) и код 1. При успехе —
+   `Connected to <connection.remoteAddress>`.
+3. Создать `new TerminalUI()` и `new ChatClient({ connection, ui, nick })`.
+4. `process.once('SIGINT', () => client.quit())`. В терминале Ctrl+C перехватывает
+   `readline` (это событие `quit` интерфейса), а этот обработчик нужен,
+   когда ввод не из терминала (лабораторная 14).
+5. `process.exitCode = await client.run()`. Никакого `process.exit()`.
+
+**Проверка:**
+
+| команда                                                    | результат                                                 | код |
+| ---------------------------------------------------------- | --------------------------------------------------------- | --- |
+| `node client.js --host 127.0.0.1 --port 5000`              | `Error: Option --nick is required` и usage                | 1   |
+| `node client.js --host 127.0.0.1 --port 5000 --nick "a b"` | `Error: Invalid nickname "a b"` и usage                   | 1   |
+| то же с `--nick ann`, сервер не запущен                    | `Cannot connect to 127.0.0.1:5000: connection refused...` | 1   |
+| `--nick ann` при запущенном сервере, затем `/quit`         | `Connected to ...`, приветствие, `Bye!`                   | 0   |
+| `--nick ann`, затем остановить сервер                      | `Connection to server lost`                               | 1   |
+
+## Шаг 3. Оба транспорта
+
+Флаг `--transport` у сервера появился в лабораторной 13, у клиента —
+в шаге 2. Убедитесь, что пара `--transport tcp` работает так же, как `ws`,
+а клиент и сервер с разными транспортами не соединяются (почему?).
+Выбор реализации транспорта есть только в двух точках входа и нигде больше.
 
 ## Шаг 4. README
 
@@ -106,14 +252,14 @@ npm run format:check
 npm test
 ```
 
-Скопируйте из эталонного проекта [test/helpers.js](../../test/helpers.js)
-и [test/chat.test.js](../../test/chat.test.js) в свой `test/`: они должны
-пройти без правок на обоих транспортах.
+Все тесты должны проходить: ваши, ступеней из лабораторных 8 и 15 и
+эталонный [test/chat.test.js](../../test/chat.test.js) из лабораторной 13 —
+теперь включая тесты выключения.
 
 Проверка изоляции транспорта — `ws` и `net` упоминаются только в `transport/`:
 
 ```bash
-git grep -n -E "from '(ws|node:net)'"
+git grep --untracked -n -E "from '(ws|net|node:net)'"
 ```
 
 ### Ручная проверка
@@ -129,10 +275,11 @@ git grep -n -E "from '(ws|node:net)'"
 - [ ] Закрытие окна терминала клиента без `/quit` — остальные видят
       «left the chat», сервер продолжает работать.
 - [ ] Остановка сервера — все клиенты сообщают о потере соединения и завершаются.
-- [ ] Клиент на другой машине в локальной сети подключается по IP сервера.
+- [ ] Клиент на другой машине в локальной сети подключается по IP сервера
+      (как узнать IP и что разрешить в брандмауэре — лабораторная 10, упражнение 5).
 - [ ] Мусор через `wscat` (не JSON, JSON без `type`, `msg` до `join`)
       не роняет сервер, в ответ приходит `error`.
-- [ ] TCP: `printf '{"type":"join","nick":"nc"}\n{"type":"msg","text":"hi"}\n' | nc localhost 5000` —
+- [ ] TCP: `printf '{"type":"join","nick":"nc"}\n{"type":"msg","text":"hi"}\n' | node nc.js localhost 5000` —
       обработаны оба сообщения.
 - [ ] Сообщения на русском и с эмодзи отображаются правильно.
 - [ ] Логика чата не импортирует `ws`.
@@ -155,7 +302,7 @@ git grep -n -E "from '(ws|node:net)'"
 ## Где это в эталонном проекте
 
 - [lib/chat-client.js](../../lib/chat-client.js) и [client.js](../../client.js).
-- `git checkout step-7` — клиент с командами и обработкой обрывов,
-  `git checkout step-10` (или `main`) — финальная версия.
+- `git show step-7:lib/chat-client.js` — клиент с командами и обработкой обрывов,
+  `main` — финальная версия.
 - [README](../../README.md) эталона — пример ответов на вопросы.
   Сравните со своими **после** того, как напишете свои.

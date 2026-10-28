@@ -1,6 +1,6 @@
 // Упражнение 4: что считать длиной строки.
 
-const samples = ['hello', 'привет', '😀', 'é', '👨‍👩‍👧'];
+const samples = ['hello', 'привет', '😀', 'e\u0301', '👨‍👩‍👧'];
 const segmenter = new Intl.Segmenter();
 
 console.log('text      .length  [...text]  graphemes  UTF-8 bytes');

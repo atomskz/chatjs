@@ -27,3 +27,13 @@ for await (const [n] of on(counter, 'tick', { close: ['done'] })) {
   ticks.push(n);
 }
 console.log(`on: collected ticks ${ticks.join(', ')}`);
+
+// Тот же итератор можно читать по одному значению через next().
+const manual = new Ticker();
+manual.start({ count: 3, intervalMs: 50 });
+const iterator = on(manual, 'tick', { close: ['done'] });
+const first = await iterator.next(); // { value: [1], done: false }
+const second = await iterator.next();
+console.log(`next: ${first.value[0]}, then ${second.value[0]}`);
+manual.stop();
+await iterator.return(); // отписаться от событий, как break в for await

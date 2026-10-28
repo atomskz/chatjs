@@ -4,6 +4,9 @@
 ожидаемую ошибку (пользователь ввёл неправильный порт) от бага в коде;
 не давать ошибке одной операции уронить всю программу.
 
+**Понадобится:** лабораторная 2. Упражнения делайте в папке `sandbox-03`
+с `"type": "module"` в `package.json`.
+
 **Примерное время:** 2 часа.
 
 ## Теория
@@ -47,13 +50,18 @@ try {
 
 ```js
 export class ProtocolError extends Error {
-  constructor(code, message) {
-    super(message);
-    this.name = 'ProtocolError';
+  constructor(code, message, options) {
+    super(message, options); // options — например { cause }, см. ниже
+    this.name = 'ProtocolError'; // иначе в логах будет просто «Error»
     this.code = code; // машиночитаемый код: по нему решаем, что делать
   }
 }
 ```
+
+`extends Error` значит «новый класс — разновидность `Error`»: у него
+есть `message` и `stack`, и `instanceof Error` для него верно. `super(...)`
+вызывает конструктор `Error` и обязан стоять до обращения к `this`.
+Подробнее о классах — в лабораторной 8.
 
 Свой класс позволяет вызывающему коду отличить «нашу» ожидаемую ошибку
 от всех остальных:
@@ -78,8 +86,13 @@ try {
 заворачивают в свою, сохраняя исходную:
 
 ```js
+throw new Error('Config is broken', { cause: error }); // встроенный Error тоже это умеет
 throw new ValidationError(null, 'User must be valid JSON', { cause: error });
 ```
+
+Чтобы `cause` работал в своём классе, конструктор должен передать
+`options` в `super(message, options)`, как в примере выше.
+Иначе причина молча потеряется.
 
 ### Ожидаемые ошибки и баги
 
@@ -124,6 +137,12 @@ throw new ValidationError(null, 'User must be valid JSON', { cause: error });
 сообщения оборачивают в **границу ошибок** — `try/catch`, который
 логирует проблему и не пускает её дальше.
 
+`try/catch` ловит только то, что выброшено **пока выполняется** код внутри
+`try`. Если внутри `try` вы лишь подписались на событие или поставили таймер,
+а исключение случится позже в обработчике, этот `try` его уже не поймает.
+Поэтому граница ошибок ставится **внутри** обработчика. Подробнее — в
+лабораторных 4 и 5.
+
 ## Упражнения
 
 Решения лежат в [solution/](solution/).
@@ -147,9 +166,22 @@ throw new ValidationError(null, 'User must be valid JSON', { cause: error });
 - нет `name` или это пустая строка — `field: 'name'`;
 - `age` не целое неотрицательное число — `field: 'age'`.
 
-Вызовите её для `'{"name":"Ann","age":30}'`, `'{"name":"Ann","age":-1}'`,
-`'{"age":5}'` и `'not json'`. Ловите только `ValidationError`, остальное
-пробрасывайте.
+Вызовите её в цикле для `'{"name":"Ann","age":30}'`, `'{"name":"Ann","age":-1}'`,
+`'{"age":5}'` и `'not json'` и выведите результат или ошибку:
+
+```
+OK: { name: 'Ann', age: 30 }
+ValidationError (field: age): Age must be a non-negative integer
+ValidationError (field: name): Name is required
+ValidationError: User must be valid JSON
+```
+
+Ловите только `ValidationError`, остальное пробрасывайте. Чтобы увидеть,
+зачем это нужно, добавьте во входные данные строку `'null'`. Это правильный
+JSON, но `data.name` для `null` выбрасывает `TypeError`. Если вы ловите всё
+подряд, этот баг превратится в странное сообщение. Если пробрасываете
+чужие ошибки — увидите стек и место бага. Исправьте его
+(`data?.name`, см. [шпаргалку](../js-cheatsheet.md)).
 
 ### Упражнение 3. Граница ошибок
 
@@ -170,17 +202,38 @@ throw new ValidationError(null, 'User must be valid JSON', { cause: error });
 
 Доработайте `parseUser`: при неверном JSON оберните `SyntaxError` в
 `ValidationError` с `{ cause: error }`, а при выводе ошибки печатайте
-и причину.
+и причину:
+
+```
+ValidationError: User must be valid JSON
+  caused by SyntaxError: Unexpected token 'o', "not json" is not valid JSON
+```
 
 ## Шаг проекта
 
-1. Доведите `main()` в `server.js` до такого вида: `UsageError` — сообщение,
-   usage и `process.exitCode = 1`; любая другая ошибка пробрасывается
-   (это баг, пусть будет виден стек).
-2. Добавьте функцию `describeListenError(error, port)`. Она понадобится
-   в лабораторной 10: для `EADDRINUSE` — «Port N is already in use...»,
-   для `EACCES` — «No permission to listen on port N...», для остальных —
-   `error.message`.
+1. В `main()` из лабораторной 2 в блоке `catch` добавьте первой строкой
+   `if (!(error instanceof UsageError)) throw error;`. Так `UsageError`
+   по-прежнему даёт сообщение, usage и код 1, а любая другая ошибка
+   пробрасывается: это баг, пусть будет виден стек.
+
+   **Проверка:** временно вставьте в функцию разбора аргументов строку
+   `null.length;` и запустите `node server.js --port 5000`. Должен
+   появиться стек с `TypeError`, а не `Error: ... Usage: ...`. Уберите строку.
+
+2. Создайте `lib/errors.js` с функцией `export function describeListenError(error, port)`.
+   Она понадобится в лабораторной 13, когда сервер начнёт слушать порт,
+   а в лабораторной 10 вы проверите её на настоящих ошибках. (В эталоне эта
+   функция лежит прямо в `server.js`; отдельный модуль удобнее тем, что его
+   можно импортировать откуда угодно, не запуская сервер.) Тексты:
+
+   | `error.code` | результат                                                                     |
+   | ------------ | ----------------------------------------------------------------------------- |
+   | `EADDRINUSE` | `Port 5000 is already in use. Stop the other process or choose another port.` |
+   | `EACCES`     | `No permission to listen on port 5000. Try a port above 1024.`                |
+   | любой другой | `Cannot start server on port 5000: <error.message>`                           |
+
+   **Проверка:** `node -e "import('./lib/errors.js').then((m) => console.log(m.describeListenError({ code: 'EADDRINUSE' }, 5000)))"`
+   из папки `chat/`.
 
 ## Контрольные вопросы
 
@@ -200,4 +253,4 @@ throw new ValidationError(null, 'User must be valid JSON', { cause: error });
   в [lib/chat-server.js](../../lib/chat-server.js).
 - `describeListenError` в [server.js](../../server.js) и `describeConnectError`
   с `AggregateError` в [client.js](../../client.js).
-- `git checkout step-7` — шаг, на котором появилась обработка ошибок и обрывов.
+- `git show step-7 --stat` — шаг, на котором появилась обработка ошибок и обрывов.

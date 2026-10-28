@@ -4,6 +4,11 @@
 проверять обычные и асинхронные функции, ожидаемые исключения и события;
 готовить и убирать окружение теста; запускать тесты одной командой.
 
+**Понадобится:** лабораторные 2, 4, 5 и 6. Упражнения 1 и 2 пишите сразу
+в проекте `chat/`, в папке `test/`: они проверяют ваши `lib/cli.js`
+и `protocol.js`. Упражнения 3 и 4 — в песочницах `sandbox-04` и `sandbox-05`,
+рядом с тем кодом, который проверяют.
+
 **Примерное время:** 2 часа.
 
 ## Теория
@@ -21,7 +26,7 @@
 
 ```js
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { describe, test } from 'node:test'; // it — то же самое, что test
 import { parsePort } from '../lib/cli.js';
 
 describe('parsePort', () => {
@@ -65,7 +70,10 @@ test('connects', async () => {
 ```
 
 Забытый `await` перед `assert.rejects` — частая ошибка: тест закончится
-раньше проверки и пройдёт, даже если код сломан.
+раньше проверки. Сам тест покажет ✔, но затем `node:test` напишет
+«generated asynchronous activity after the test ended... Missing expected rejection»
+и отметит весь файл как упавший. Увидели такое сообщение — ищите
+пропущенный `await`.
 
 ### Табличные тесты
 
@@ -99,8 +107,20 @@ describe('server', () => {
 
 ### Фиктивное время
 
-`t.mock.timers.enable({ apis: ['setTimeout'] })` подменяет таймеры,
-и `t.mock.timers.tick(60_000)` «перематывает» минуту мгновенно.
+Тест `delay(60_000)` не должен ждать минуту. Для этого таймеры подменяют:
+
+```js
+test('waits a minute', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] }); // с этого места setTimeout — поддельный
+  const promise = delay(60_000, 'done');
+  t.mock.timers.tick(60_000); // «перемотать» время: таймер срабатывает сразу
+  assert.equal(await promise, 'done'); // промис всё равно нужно дождаться
+});
+```
+
+`t` — объект текущего теста, его передают первым аргументом. `tick()`
+синхронный: он вызывает сработавшие таймеры, но промисы выполняются
+чуть позже, поэтому `await` остаётся. После теста подмена снимается сама.
 
 ### Запуск
 
@@ -145,8 +165,9 @@ node --test "labs/07-testing/solution/*.test.js"
   с кириллицей и эмодзи;
 - `decode` выбрасывает `ProtocolError` с кодом `BAD_MESSAGE` для `'hello'`,
   `''`, `'null'`, `'42'`, `'[1]'`, `'{"text":"hi"}'` и `'{"type":5}'`;
-- `isValidNick` — на тех же случаях, что в лабораторной 6;
-- `validateText` пропускает 1000 эмодзи и отклоняет 1001.
+- `isValidNick` — на тех же случаях, что в лабораторной 6, включая `'ann\n'`;
+- `validateText` возвращает `null` для обычного текста, `'Message must not be empty'`
+  для `''` и `'   '`, пропускает 1000 эмодзи и отклоняет 1001.
 
 ### Упражнение 3. Асинхронные тесты
 
@@ -171,8 +192,9 @@ node --test "labs/07-testing/solution/*.test.js"
 
 ## Шаг проекта
 
-1. Перенесите тесты из упражнений 1 и 2 в свой проект: `test/cli.test.js`
-   и `test/protocol.test.js`.
+1. Убедитесь, что тесты из упражнений 1 и 2 лежат в проекте:
+   `chat/test/cli.test.js` и `chat/test/protocol.test.js`. Импорты в них
+   выглядят так: `import { parsePort } from '../lib/cli.js'`.
 2. Добавьте в `package.json` скрипт
    `"test": "node --test --test-timeout=10000 \"test/**/*.test.js\""`.
    Шаблон `*.test.js` нужен, чтобы вспомогательные файлы в `test/`
@@ -194,4 +216,4 @@ node --test "labs/07-testing/solution/*.test.js"
   Цикл по транспортам — тот же табличный подход.
 - [test/line-splitter.test.js](../../test/line-splitter.test.js) — модульные тесты.
 - Скрипт `test` в [package.json](../../package.json).
-- `git checkout step-8` — шаг, на котором появились тесты.
+- `git show step-8 --stat` — шаг, на котором появились тесты.

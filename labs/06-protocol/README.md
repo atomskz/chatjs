@@ -5,6 +5,9 @@
 что JSON умеет и чего не умеет, как работают регулярные выражения
 и что на самом деле значит «длина строки».
 
+**Понадобится:** лабораторная 3 (классы ошибок). Упражнения делайте в папке
+`sandbox-06` с `"type": "module"`, шаг проекта — в `chat/`.
+
 **Примерное время:** 2 часа.
 
 ## Теория
@@ -109,7 +112,12 @@ NICK_PATTERN.test('alice'); // true
 
 - `[...text]` разбивает строку на code points: так считать символы честнее.
 - Символ, который видит человек (графема), может состоять из нескольких
-  code points. Их считает `Intl.Segmenter`.
+  code points. Графемы считает `Intl.Segmenter`:
+  `[...new Intl.Segmenter().segment(text)].length`.
+- Одна и та же буква бывает записана по-разному: `é` — один code point
+  (U+00E9) или два: `e` и знак ударения (U+0301). Выглядят одинаково,
+  но `'\u00e9' === 'e\u0301'` — `false`. Привести строку к одной форме
+  можно через `text.normalize('NFC')`.
 - Байты в UTF-8 считает `Buffer.byteLength(text)`. Это важно для сети
   (лабораторная 11).
 
@@ -141,7 +149,7 @@ NICK_PATTERN.test('alice'); // true
 
 ### Упражнение 4. Сколько символов в строке
 
-Для строк `'hello'`, `'привет'`, `'😀'`, `'é'` (e с ударением)
+Для строк `'hello'`, `'привет'`, `'😀'`, `'e\u0301'` (e и отдельный знак ударения)
 и `'👨‍👩‍👧'` выведите `.length`, `[...text].length`, число графем
 и число байт в UTF-8. Каким способом лучше проверять ограничение
 «не длиннее 1000 символов»?
@@ -155,15 +163,26 @@ NICK_PATTERN.test('alice'); // true
 - `ErrorCode` — объект с кодами `BAD_MESSAGE`, `UNKNOWN_TYPE`, `NOT_JOINED`,
   `ALREADY_JOINED`, `INVALID_NICK`, `NICK_TAKEN`, `INVALID_TEXT`,
   `INTERNAL_ERROR`;
-- `class ProtocolError extends Error` с полем `code`;
+- `class ProtocolError extends Error` с конструктором `(code, message)`,
+  полями `name = 'ProtocolError'` и `code`. Порядок аргументов важен:
+  сервер будет пересылать клиенту `error.code` и `error.message`;
 - `ClientMessage` (`join`, `msg`, `list`, `leave`) и `ServerMessage`
   (`welcome`, `error`, `msg`, `system`, `users`) — конструкторы сообщений
   по таблицам из раздела 5 ТЗ;
 - `encode(message)` и `decode(text)`. Если форма неверна, `decode`
   выбрасывает `ProtocolError` с кодом `BAD_MESSAGE`;
-- `isValidNick(nick)` и `validateText(text)`. Вторая возвращает `null`,
-  если текст в порядке, или описание проблемы: пустой текст или текст
-  длиннее `MAX_TEXT_LENGTH` символов (code points).
+- `isValidNick(nick)` — `true`, если это строка по правилу из упражнения 3;
+- `validateText(text)` — возвращает `null`, если текст в порядке, или
+  описание проблемы (эти тексты проверяют тесты эталона):
+
+  | вход                                                 | результат                                  |
+  | ---------------------------------------------------- | ------------------------------------------ |
+  | не строка, пустая строка или одни пробелы (`trim()`) | `'Message must not be empty'`              |
+  | длиннее `MAX_TEXT_LENGTH` символов (code points)     | `'Message is longer than 1000 characters'` |
+  | остальное                                            | `null`                                     |
+
+  Проверку на строку делайте первой: `[...text]` для `undefined`
+  выбросит исключение.
 
 В лабораторной 7 вы напишете тесты для этого модуля.
 
@@ -180,5 +199,5 @@ NICK_PATTERN.test('alice'); // true
 ## Где это в эталонном проекте
 
 - [protocol.js](../../protocol.js) — весь модуль целиком.
-- `git checkout step-4` — первая версия протокола, `git checkout step-5` —
+- `git show step-4:protocol.js` — первая версия протокола, `git diff step-4 step-5 -- protocol.js` —
   добавились ники.
