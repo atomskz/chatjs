@@ -2,6 +2,8 @@
 // Этот модуль общий для сервера и клиента и ничего не знает о сети:
 // он превращает объекты в строки и обратно, а доставка строк — забота транспорта.
 
+export const MAX_TEXT_LENGTH = 1000;
+
 const NICK_PATTERN = /^[A-Za-z0-9_-]{1,20}$/;
 export const NICK_RULES = '1-20 characters: latin letters, digits, "_" or "-"';
 
@@ -13,6 +15,8 @@ export const ErrorCode = {
   ALREADY_JOINED: 'ALREADY_JOINED',
   INVALID_NICK: 'INVALID_NICK',
   NICK_TAKEN: 'NICK_TAKEN',
+  INVALID_TEXT: 'INVALID_TEXT',
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
 };
 
 /** Ошибка разбора входящего сообщения. */
@@ -75,4 +79,20 @@ export function decode(text) {
 
 export function isValidNick(nick) {
   return typeof nick === 'string' && NICK_PATTERN.test(nick);
+}
+
+/**
+ * Проверяет текст сообщения чата.
+ * @returns {string | null} описание проблемы или null, если текст корректен
+ */
+export function validateText(text) {
+  if (typeof text !== 'string' || text.trim() === '') {
+    return 'Message must not be empty';
+  }
+  // Считаем символы (code points), а не UTF-16 единицы:
+  // у `'😀'.length` значение 2, а у `[...'😀'].length` — 1.
+  if ([...text].length > MAX_TEXT_LENGTH) {
+    return `Message is longer than ${MAX_TEXT_LENGTH} characters`;
+  }
+  return null;
 }

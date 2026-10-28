@@ -29,6 +29,23 @@ function parseClientArgs() {
   return { host, port, nick };
 }
 
+function describeConnectError(error) {
+  // При подключении к localhost Node.js пробует и IPv4, и IPv6,
+  // и тогда ошибки приходят пачкой в AggregateError.
+  const code = error.code ?? error.errors?.[0]?.code;
+  switch (code) {
+    case 'ECONNREFUSED':
+      return 'connection refused. Is the server running on this host and port?';
+    case 'ETIMEDOUT':
+      return 'connection timed out. Check the address and your network.';
+    case 'ENOTFOUND':
+    case 'EAI_AGAIN':
+      return 'host not found. Check the address.';
+    default:
+      return error.message;
+  }
+}
+
 async function main() {
   let options;
   try {
@@ -46,14 +63,17 @@ async function main() {
   try {
     connection = await transport.connect({ host, port });
   } catch (error) {
-    console.error(`Cannot connect to ${host}:${port}: ${error.message}`);
+    console.error(`Cannot connect to ${host}:${port}: ${describeConnectError(error)}`);
     process.exitCode = 1;
     return;
   }
   console.log(`Connected to ${connection.remoteAddress}`);
 
   const client = new ChatClient({ connection, ui: new TerminalUI(), nick });
-  await client.run();
+  // В интерактивном терминале Ctrl+C перехватывает readline (см. TerminalUI).
+  // Сюда сигнал попадает, только если ввод перенаправлен, например из файла.
+  process.once('SIGINT', () => client.quit());
+  process.exitCode = await client.run();
 }
 
 main();

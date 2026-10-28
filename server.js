@@ -1,5 +1,5 @@
-// Точка входа сервера: разбирает аргументы и связывает транспорт
-// с логикой чата. Сама логика — в lib/chat-server.js.
+// Точка входа сервера: разбирает аргументы, связывает транспорт
+// с логикой чата и обрабатывает Ctrl+C. Сама логика — в lib/chat-server.js.
 
 import { ChatServer } from './lib/chat-server.js';
 import { UsageError, parseOptions, parsePort, requireOption } from './lib/cli.js';
@@ -62,6 +62,17 @@ async function main() {
     return;
   }
   logger.info(`Server listening on port ${server.port}`);
+
+  const stop = async () => {
+    logger.info('Shutting down...');
+    chat.shutdown();
+    // Ждём, пока закроются все соединения. Зависнуть здесь нельзя:
+    // транспорт сам рвёт соединения, которые не закрылись за пару секунд.
+    await server.close();
+    logger.info('Server stopped');
+  };
+  process.once('SIGINT', stop); // Ctrl+C
+  process.once('SIGTERM', stop); // kill, остановка из менеджера процессов
 }
 
 main();
