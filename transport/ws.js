@@ -6,6 +6,7 @@ import { EventEmitter, once } from 'node:events';
 import http from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
 
+const CONNECT_TIMEOUT_MS = 5000;
 const CLOSE_TIMEOUT_MS = 2000;
 // Сообщение чата — максимум 1000 символов, 64 КБ хватит с большим запасом.
 // Ограничение защищает сервер от клиента, присылающего гигантские фреймы.
@@ -79,4 +80,19 @@ export async function listen({ port, onConnection }) {
         httpServer.close(() => resolve());
       }),
   };
+}
+
+export async function connect({ host, port }) {
+  // IPv6-адрес в URL записывается в квадратных скобках: ws://[::1]:5000
+  const urlHost = host.includes(':') ? `[${host}]` : host;
+  const url = `ws://${urlHost}:${port}`;
+
+  const socket = new WebSocket(url, {
+    handshakeTimeout: CONNECT_TIMEOUT_MS,
+    maxPayload: MAX_MESSAGE_BYTES,
+  });
+  // Ждём 'open'; если раньше придёт 'error' (сервер недоступен, таймаут),
+  // once() выбросит эту ошибку.
+  await once(socket, 'open');
+  return new WsConnection(socket, url);
 }
