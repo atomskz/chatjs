@@ -38,6 +38,17 @@ export class ChatServer {
 менять внутри, не ломая тех, кто им пользуется. Закрытые поля проверяет
 сам язык. Подчёркивание (`_clients`) — лишь соглашение, его можно нарушить.
 
+Внутри методов к полям обращаются через `this`: `this.#clients`.
+Подписываясь на события соединения, пишите стрелочные функции
+(лабораторная 5, «`this` в обработчиках»):
+
+```js
+// внутри handleConnection(connection) класса ChatServer:
+connection.on('message', (text) => this.#handleMessage(connection, text)); // правильно
+connection.on('message', this.#handleMessage); // ошибка: this внутри — уже соединение
+// → TypeError: Cannot read private member #clients from an object whose class did not declare it
+```
+
 ### `Map` и `Set`
 
 У обычного объекта ключи — строки. Объект в роли ключа превратится
@@ -46,18 +57,37 @@ export class ChatServer {
 
 ```js
 const clients = new Map();
-clients.set(connection, { nick: null }); // состояние этого клиента
-clients.get(connection).nick = 'ann';
-clients.delete(connection);
-clients.size;
+clients.set(connection, { nick: null }); // добавить или заменить
+clients.has(connection); // true — есть ли такой ключ
+clients.get(connection); // { nick: null }; для неизвестного ключа — undefined
+clients.get(connection).nick = 'ann'; // значение — ссылка на объект: меняем прямо в Map
+clients.delete(connection); // true, если ключ был; false, если нет
+clients.size; // сколько записей
+
 for (const [connection, client] of clients) {
-  /* в порядке добавления */
+  /* пары ключ-значение, в порядке добавления */
 }
+clients.keys(); // перебор ключей; clients.values() — значений; clients.entries() — пар
+[...clients.keys()]; // ключи массивом
+
+const order = new Map([
+  ['c', 3],
+  ['a', 1],
+]); // Map из массива пар
 ```
 
-`Map` помнит порядок добавления, поэтому список участников сам собой
-получается в порядке входа. `Set` — множество уникальных значений
-с методами `add`, `has` и `delete`.
+`Map` помнит порядок **добавления**. Клиент попадает в `Map` при подключении,
+поэтому список ников идёт в порядке подключения. Обычно он совпадает
+с порядком входа, но не всегда: если `ann` подключилась первой, а `join`
+прислала второй, она всё равно окажется в списке первой. Для чата этого
+достаточно.
+
+`Set` — множество уникальных значений: `add`, `has`, `delete`, `size`.
+Убрать повторы из массива: `[...new Set(['ann', 'bob', 'ann'])]` → `['ann', 'bob']`.
+
+Почему не массив клиентов: найти в массиве клиента по соединению можно
+только перебором (`clients.find(...)`) на **каждое** сообщение, а удалять
+из середины массива неудобно. `Map` находит запись по ключу сразу.
 
 ### Внедрение зависимостей
 
@@ -79,6 +109,10 @@ chat.handleConnection(fakeConnection); // соединение в памяти �
 
 - **Состояние** — `Map` «соединение → `{ nick }`». В неё попадают все
   подключившиеся, а `nick` остаётся `null`, пока не пришёл `join`.
+  Хранить и тех, кто ещё не вошёл, нужно: сервер должен отличать
+  «подключился, но не вошёл» (ответить `NOT_JOINED`) от неизвестного
+  соединения, логировать их отключение и закрыть их при выключении
+  (лабораторная 14).
 - **Источник правды — сервер.** Поля `from` и `ts` в сообщении чата
   ставит сервер, а не клиент: иначе любой мог бы писать от чужого имени.
 - **Рассылка** — цикл по своей `Map`. Сообщение кодируется один раз,
@@ -191,7 +225,7 @@ export class ChatServer {
   #handleJoin(connection, client, message) {}
   #handleChatMessage(connection, client, message) {}
   #handleDisconnect(connection) {}
-  #getNicks() {} // ники вошедших, в порядке входа
+  #getNicks() {} // ники вошедших, в порядке подключения
   #broadcast(message, { except } = {}) {} // всем вошедшим, кроме except
   #send(connection, message) {} // connection.send(encode(message))
   #sendError(connection, code, text) {} // warn в лог + ServerMessage.error
@@ -200,6 +234,10 @@ export class ChatServer {
 
 Логгер — любой объект с методами `info`, `warn` и `error`. Вызывайте только
 их, а не `logger.log`: тесты подставляют объект ровно с этими тремя методами.
+Каждому методу передавайте **одну строку**, собранную шаблонной строкой:
+``logger.info(`Joined: ${nick} (${connection.remoteAddress})`)``. Тестовый логгер
+сохраняет только первый аргумент, поэтому вызов в стиле `console.log`
+(`logger.info('Joined:', nick)`) потеряет ник.
 
 ### Ступень 1. Разбор и ошибки до входа
 
@@ -215,6 +253,25 @@ export class ChatServer {
 3. клиент ещё не вошёл, а `type` не `join` — `NOT_JOINED`;
 4. дальше — `switch (message.type)` с обработчиком для каждого типа.
 
+Для шага 1 нужен свой маленький `try/catch` прямо вокруг `decode`.
+Переменную объявите до него: после блока `const` уже не видно
+(см. [шпаргалку](../js-cheatsheet.md#переменные-и-строки)):
+
+```js
+// внутри #handleMessage(connection, text):
+let message;
+try {
+  message = decode(text);
+} catch (error) {
+  this.#sendError(connection, error.code, error.message); // ProtocolError → BAD_MESSAGE
+  return;
+}
+```
+
+Этот `catch` превращает ошибку протокола в ответ клиенту. Любая другая
+ошибка (баг) сюда не попадёт: её поймает общая граница ошибок из ступени 5
+и ответит `INTERNAL_ERROR`.
+
 ### Ступень 2. Регистрация
 
 Тест: [chat-server-2-join.test.js](tests/chat-server-2-join.test.js).
@@ -224,8 +281,10 @@ export class ChatServer {
 - уже вошёл — `ALREADY_JOINED`, соединение остаётся открытым;
 - `!isValidNick(nick)` — `INVALID_NICK`, затем `connection.close()`;
 - ник среди `#getNicks()` — `NICK_TAKEN`, затем `connection.close()`;
-- иначе: `client.nick = nick`, `info` в лог, новичку — `welcome` со списком
-  ников, остальным — `system` «nick joined the chat» (`#broadcast` с `except: connection`).
+- иначе, **именно в таком порядке**: `client.nick = nick`, `info` в лог,
+  новичку — `welcome` со списком ников, остальным — `system`
+  «nick joined the chat» (`#broadcast` с `except: connection`).
+  Порядок «сначала лог, потом отправка» проверяет тест ступени 5.
 
 `#broadcast` проходит по `#clients` и отправляет только тем, у кого `nick !== null`.
 Сообщение кодируется один раз до цикла.

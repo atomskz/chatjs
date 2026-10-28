@@ -46,7 +46,8 @@ function describeConnectError(error) {
     case 'EAI_AGAIN':
       return 'host not found. Check the address.';
     default:
-      return error.message;
+      // У AggregateError message пустой — тогда показываем хотя бы код.
+      return error.message || code;
   }
 }
 

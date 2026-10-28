@@ -16,6 +16,21 @@ const big = 64 * 1024; // 65536
 const minute = 60_000; // _ в числе — просто разделитель для читаемости
 ```
 
+`let` и `const` видны только внутри своих фигурных скобок (блока):
+
+```js
+try {
+  const data = JSON.parse(text);
+} catch {}
+console.log(data); // ReferenceError: data is not defined
+
+let message; // объявить снаружи...
+try {
+  message = JSON.parse(text); // ...присвоить внутри
+} catch {}
+console.log(message); // работает
+```
+
 ## Функции
 
 ```js
@@ -29,6 +44,28 @@ const greet = (name = 'guest') => `Hello, ${name}`; // значение пара
 // Стрелочная функция, возвращающая объект: скобки вокруг {} обязательны,
 // иначе {} будет считаться телом функции.
 const join = (nick) => ({ type: 'join', nick });
+
+// Немедленно вызываемая функция: объявили и сразу вызвали.
+(async () => {
+  await something();
+})();
+```
+
+### `this` и стрелочные функции
+
+`this` в методе — объект, у которого метод вызвали. Обычная `function`
+получает свой `this` в зависимости от того, кто её вызвал, а стрелочная
+функция берёт `this` снаружи. Поэтому колбэки внутри классов пишут стрелками:
+
+```js
+class Ticker extends EventEmitter {
+  start() {
+    setInterval(() => this.emit('tick'), 100); // this — наш Ticker
+    // setInterval(function () { this.emit('tick') }, 100); // TypeError: this — уже не Ticker
+    // socket.on('data', this.handle);                       // то же: метод «оторвался»
+    // socket.on('data', (chunk) => this.handle(chunk));     // правильно
+  }
+}
 ```
 
 ## Деструктуризация
@@ -41,6 +78,10 @@ const { port: actualPort } = server.address(); // с переименовани�
 const [first, second] = ['a', 'b', 'c']; // first = 'a', second = 'b'
 const [command] = input.split(' '); // первое слово
 const [, ...rest] = process.argv; // пропустить первый элемент, остальные — в массив rest
+
+// В уже объявленную переменную — в круглых скобках, иначе { } примут за блок:
+let values;
+({ values } = parseArgs(config));
 ```
 
 В параметрах функции — так передают «именованные аргументы»:

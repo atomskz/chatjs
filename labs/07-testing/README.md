@@ -53,7 +53,25 @@ describe('parsePort', () => {
 - класс — `assert.throws(fn, UsageError)`;
 - объект с ожидаемыми полями — `{ code: 'ETIMEDOUT' }`;
 - регулярное выражение для `message` — `/longer/`;
-- функция-проверка, которая возвращает `true`.
+- функция-проверка: получает ошибку и возвращает `true`, если она подходит
+  (или сама падает на `assert` внутри).
+
+Если нужно проверить **и класс, и текст**, нужна функция:
+
+```js
+assert.throws(
+  () => requireOption({}, 'port'),
+  (error) => error instanceof UsageError && error.message === 'Option --port is required',
+);
+```
+
+Объект `{ name: 'UsageError', message: '...' }` здесь не сработает: класс
+`class UsageError extends Error {}` из лабораторной 2 не задаёт `name`,
+и у его ошибок `name` равно `'Error'`. К тому же объект не проверяет класс.
+
+Последним аргументом любой проверки можно передать текст. Он напечатается,
+если проверка не прошла, — удобно в цикле, чтобы видеть, на каком значении
+упало: `assert.equal(isValidNick(nick), false, nick)`.
 
 Модуль `node:assert/strict` важнее, чем кажется: в нём `equal` сравнивает
 через `===`. В нестрогом `node:assert` проверка `assert.equal(1, '1')` проходит.
@@ -70,10 +88,15 @@ test('connects', async () => {
 ```
 
 Забытый `await` перед `assert.rejects` — частая ошибка: тест закончится
-раньше проверки. Сам тест покажет ✔, но затем `node:test` напишет
-«generated asynchronous activity after the test ended... Missing expected rejection»
-и отметит весь файл как упавший. Увидели такое сообщение — ищите
-пропущенный `await`.
+раньше, чем проверка выполнится, и сам тест покажет ✔. Дальше два варианта:
+
+- если проверка не прошла бы, `node:test` позже напишет «generated
+  asynchronous activity after the test ended...» с текстом ошибки и отметит
+  весь файл как упавший;
+- если прошла бы — никакого сообщения не будет. Тест «зелёный», но на самом
+  деле ничего не проверял, и сломанный код он тоже пропустил бы.
+
+Увидели «asynchronous activity after the test ended» — ищите пропущенный `await`.
 
 ### Табличные тесты
 
@@ -90,19 +113,32 @@ for (const input of ['0', '65536', 'abc', '']) {
 ### Подготовка и уборка: хуки
 
 ```js
+import { afterEach, beforeEach, describe, test } from 'node:test';
+
 describe('server', () => {
   let server;
   beforeEach(async () => {
-    server = await startServer();
+    server = await startServer(); // перед каждым тестом в этом describe
   });
   afterEach(async () => {
-    await server.stop(); // выполнится, даже если тест упал
+    await server.stop(); // после каждого теста, даже если тест упал
+  });
+  test('...', async () => {
+    /* server уже запущен */
   });
 });
 ```
 
-Есть также `before` и `after` (один раз на весь `describe`) и `t.after(fn)`
-внутри конкретного теста. Неубранный сервер или таймер — частая причина
+`before` и `after` работают так же, но один раз на весь `describe`.
+Уборку для одного конкретного теста регистрируют через `t.after`:
+
+````js
+test('uses a temporary server', async (t) => {
+  const server = await startServer();
+  t.after(() => server.stop()); // выполнится после этого теста при любом исходе
+  // ...
+});
+``` Неубранный сервер или таймер — частая причина
 того, что тесты «зависают» после последнего теста.
 
 ### Фиктивное время
@@ -116,7 +152,7 @@ test('waits a minute', async (t) => {
   t.mock.timers.tick(60_000); // «перемотать» время: таймер срабатывает сразу
   assert.equal(await promise, 'done'); // промис всё равно нужно дождаться
 });
-```
+````
 
 `t` — объект текущего теста, его передают первым аргументом. `tick()`
 синхронный: он вызывает сработавшие таймеры, но промисы выполняются

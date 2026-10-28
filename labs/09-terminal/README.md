@@ -67,6 +67,11 @@ rl.on('SIGINT', () => {
 });
 ```
 
+- Приглашение можно задать сразу: `createInterface({ input, output, prompt: '> ' })`.
+  `rl.prompt()` только **рисует** его. После Enter `readline` сам его не
+  перерисовывает, поэтому в обработчике `line` снова вызывают `rl.prompt()`.
+- Приглашение печатается в `output`, даже если ввод идёт из конвейера.
+  Поэтому в выводе программы с конвейером тоже будет `> `.
 - Ctrl+D на пустой строке означает «ввод закончился»: придёт `close`.
 - Ctrl+C в интерактивном терминале перехватывает `readline` и испускает
   на `rl` событие `SIGINT`. Если обработчика `SIGINT` нет, `readline`
@@ -77,28 +82,78 @@ rl.on('SIGINT', () => {
 - Если ввод не из терминала, Ctrl+C до `readline` не доходит:
   сигнал получает процесс (лабораторная 14).
 
+### Вопрос и ответ: `question`
+
+`question` печатает вопрос и ждёт **одну следующую** строку. Есть две формы:
+
+```js
+// С колбэком — модуль node:readline
+rl.question('Really quit? (y/n) ', (answer) => {
+  if (answer === 'y') rl.close();
+});
+
+// С промисом — модуль node:readline/promises
+import readline from 'node:readline/promises';
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+const name = await rl.question('What is your name? ');
+```
+
+### Строки как асинхронный итератор
+
+`readline` тоже отдаёт строки асинхронным итератором (лабораторная 5):
+
+```js
+for await (const line of rl) {
+  console.log(`got ${line}`);
+} // цикл закончится, когда ввод закончится
+
+// или по одной строке:
+const lines = rl[Symbol.asyncIterator]();
+process.stdout.write('What is your name? '); // вопрос печатаем сами
+const { value, done } = await lines.next(); // done === true — ввод закончился
+```
+
+`Symbol.asyncIterator` — это стандартное «имя» метода, который возвращает
+асинхронный итератор. Его вызывает `for await` сам, а вручную его вызывают,
+когда нужно читать строки по одной через `next()`.
+
 ### Две ловушки
 
 1. **Строки после `close()`.** Если несколько строк пришли одним куском
-   (из файла или конвейера), `readline` отдаёт событием `line` и те,
-   что идут после вашего `rl.close()`. А `rl.prompt()` после закрытия
-   выбрасывает `ERR_USE_AFTER_CLOSE`. Решение — флаг «уже закрыто»,
-   который проверяется в обработчике `line`.
+   (из файла или конвейера), `readline` делит кусок на строки и в цикле
+   испускает `line` для каждой. `rl.close()` внутри обработчика этот цикл
+   не останавливает, и строки, которые идут после `exit`, всё равно придут.
+   А `rl.prompt()` после закрытия выбрасывает `ERR_USE_AFTER_CLOSE`.
+   Решение — флаг «уже закрыто», который проверяется в обработчике `line`.
 2. **`rl.question` и конвейер.** `question` ждёт **следующую** строку.
    Строки, прочитанные до вызова `question`, теряются. С клавиатуры
    этого не видно, а с конвейером второй вопрос не получит ответа,
    и процесс завершится с кодом 13 («unsettled top-level await»).
-   Надёжнее асинхронный итератор: `rl[Symbol.asyncIterator]()` складывает
-   строки в очередь.
+   Надёжнее асинхронный итератор: он складывает строки в очередь.
+
+### Запись в поток: `write`
+
+`console.log` всегда пишет в `process.stdout` и сам добавляет перевод строки.
+У любого потока вывода есть метод `write`: он пишет ровно то, что ему
+передали, без перевода строки.
+
+```js
+process.stdout.write('no newline'); // курсор остаётся в конце этой строки
+output.write(`${line}\n`); // сами добавляем перевод строки
+```
+
+Если класс получает поток вывода параметром (`output`), печатать нужно
+через `output.write`, а не через `console.log`. Иначе подставить другой
+поток, например для теста, не получится.
 
 ### Управление курсором
 
 Терминал понимает escape-последовательности. `readline` даёт для них функции:
 
 ```js
-readline.cursorTo(process.stdout, 0); // курсор в начало строки
-readline.clearLine(process.stdout, 0); // стереть строку
-readline.moveCursor(process.stdout, 0, -1); // на строку вверх
+readline.cursorTo(process.stdout, 0); // курсор в колонку 0, в начало строки
+readline.clearLine(process.stdout, 0); // 0 — стереть всю строку (-1 — слева от курсора, 1 — справа)
+readline.moveCursor(process.stdout, 0, -1); // сдвиг: 0 колонок, на 1 строку вверх
 ```
 
 ### Вывод над строкой ввода
@@ -122,6 +177,8 @@ console.log(styleText(['bold', 'green'], 'you'));
 
 `styleText` сама проверяет поток вывода и не добавляет escape-коды,
 если вывод идёт не в терминал (а также если задана переменная `NO_COLOR`).
+По умолчанию проверяется `process.stdout`. Если вы пишете в другой поток,
+передайте его: `styleText('red', text, { stream: output })`.
 
 ### Интерфейс отдельно от логики
 
@@ -187,7 +244,8 @@ Lines: 2. Bye!
 - `constructor({ input = process.stdin, output = process.stdout } = {})` —
   `= {}`, чтобы работал вызов `new TerminalUI()` без аргументов;
 - события: `line` (text) — введена строка; `quit` — Ctrl+C, Ctrl+D или конец ввода;
-- методы `printChat({ from, text, ts, isOwn })`, `printSystem(text, ts)`,
+- методы `printChat({ from, text, ts, isOwn })`, `printSystem(text, ts = Date.now())`
+  (время по умолчанию — сейчас: так удобно для своих локальных уведомлений),
   `printInfo(text)`, `printError(text)` в формате из раздела 6.2 ТЗ:
 
   ```

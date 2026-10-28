@@ -38,7 +38,23 @@ Connection (EventEmitter):
   send(text)         — отправить одно сообщение
   close()            — штатно закрыть
   'message' (text)   — пришло одно целое сообщение
-  'close' (error?)   — соединение закрыто; error есть, если это обрыв
+  'close' (error?)   — соединение закрыто; error есть, если транспорт узнал причину
+```
+
+Про `close(error?)` важно не ошибиться: ошибка передаётся, только если
+транспорт **знает** причину. Отсутствие ошибки не значит, что закрытие
+было штатным. Например, если клиент на WebSocket просто закрыл терминал,
+`ws` сообщит о закрытии кодом 1006 без всякой ошибки, а TCP в Windows
+обычно даст `ECONNRESET`, в Linux — просто FIN без ошибки. Поэтому логика
+чата обрабатывает любое `close` одинаково: «участник ушёл».
+
+Путь события, когда клиент закрыл терминал без `leave`:
+
+```
+ОС клиента закрывает сокет (FIN или RST)
+  → у сервера: ws — 'close' с кодом 1006 / net — 'end' или 'error' ECONNRESET, затем 'close'
+  → адаптер транспорта: 'close' (error или ничего)
+  → ChatServer.#handleDisconnect: удалить из Map, разослать «X left the chat»
 ```
 
 Обратите внимание, чего в контракте **нет**: событий `error`, `Buffer`,
@@ -104,10 +120,23 @@ import * as tcp from './tcp.js';
 import * as ws from './ws.js';
 
 const transports = { ws, tcp };
+export const TRANSPORT_NAMES = Object.keys(transports); // ['ws', 'tcp']
 export function getTransport(name) {
   /* ... */
 }
 ```
+
+`import * as tcp from './tcp.js'` собирает **все** экспорты модуля в один
+объект: `tcp.listen`, `tcp.connect`. Так у обоих транспортов получается
+одинаковая форма — объект с `listen` и `connect`, — и их можно сложить
+в один объект `{ ws, tcp }` и выбирать по имени: `transports['tcp']`.
+
+**Сколько файлов трогать, чтобы добавить транспорт.** Новый файл в `transport/`
+и одна строка в `transport/index.js`. Больше ничего: usage в точках входа
+собирается из `TRANSPORT_NAMES` (`TRANSPORT_NAMES.join('|')` → `ws|tcp`),
+а тесты контракта и тесты чата перебирают `TRANSPORT_NAMES` сами. В эталоне
+переход с WebSocket на TCP (`git diff --stat step-8 step-9`) тронул только
+папку `transport/` и добавил тесты.
 
 Реализацию выбирает точка входа (`server.js`, `client.js`). Это
 **корень композиции**: единственное место, где части приложения
@@ -159,6 +188,25 @@ for (const name of TRANSPORT_NAMES) {
 `set(key, value) → Promise<void>` и сделайте две реализации:
 в памяти (`Map`) и в JSON-файле. Напишите **один** набор тестов и
 прогоните его в цикле по обеим реализациям.
+
+Для файловой версии понадобится:
+
+```js
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+await writeFile(path, JSON.stringify(data)); // записать файл целиком
+const folder = await mkdtemp(join(tmpdir(), 'store-')); // новая временная папка
+await rm(folder, { recursive: true, force: true }); // удалить папку со всем содержимым
+```
+
+`join` собирает путь с правильными разделителями для вашей ОС, `tmpdir()` —
+системная папка для временных файлов. Каждому тесту давайте **свой**
+файл: если тесты пишут в один и тот же файл, второй запуск увидит данные
+первого, и тест «ключа ещё нет» упадёт. Временную папку удаляйте в хуке
+`after`. Если файла ещё нет, `readFile` выбросит ошибку с кодом `ENOENT` —
+для хранилища это значит «пусто».
 
 ### Упражнение 2. TCP-транспорт
 
@@ -215,6 +263,15 @@ for (const name of TRANSPORT_NAMES) {
 - `connect` к порту, где никто не слушает, отклоняется с `ECONNREFUSED`;
 - `listen` на занятом порту отклоняется с `EADDRINUSE`.
 
+Подсказки:
+
+- подключайтесь к `127.0.0.1`, а не к `localhost`: тогда ошибка будет одна,
+  с `code`, а не `AggregateError` (лабораторная 10);
+- порт, где точно никто не слушает: запустите `listen({ port: 0 })`, запомните
+  `port`, закройте сервер — и подключайтесь к этому порту;
+- занятый порт: запустите сервер на порту 0 и попробуйте второй `listen`
+  на его `port`.
+
 ## Шаг проекта
 
 1. Положите в проект транспорт из упражнений 2–4 (`transport/`) и тесты
@@ -238,11 +295,15 @@ for (const name of TRANSPORT_NAMES) {
 3. **Флаг `--transport`.** Добавьте в разбор аргументов `server.js` опцию
    `transport: { type: 'string', default: DEFAULT_TRANSPORT }`. Если значения
    нет в `TRANSPORT_NAMES`, бросайте `new UsageError('Unknown transport "<имя>"')`.
-   В usage допишите `[--transport ws|tcp]`.
+   Функция разбора возвращает его под понятным именем:
+   `return { port, transportName: values.transport }`. В usage допишите
+   `` `[--transport ${TRANSPORT_NAMES.join('|')}]` `` — список собирается сам,
+   и при новом транспорте точку входа менять не придётся.
 
 4. **Соедините части** в `main()` сервера:
 
    ```js
+   // внутри async function main(), после разбора аргументов:
    const logger = createLogger();
    const chat = new ChatServer({ logger });
    const transport = getTransport(options.transportName);
@@ -292,6 +353,7 @@ for (const name of TRANSPORT_NAMES) {
    которая просто закрывает все соединения:
 
    ```js
+   // метод класса ChatServer
    shutdown() {
      for (const connection of this.#clients.keys()) connection.close();
    }
