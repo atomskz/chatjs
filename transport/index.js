@@ -1,8 +1,8 @@
 // Слой транспорта: единственное место в проекте, которое знает,
 // как байты на самом деле ходят по сети. Логика чата работает только
-// с абстрактным «соединением», описанным ниже, и не импортирует сетевые библиотеки.
+// с абстрактным «соединением», описанным ниже, и не импортирует ни `ws`, ни `net`.
 //
-// Транспорт экспортирует две функции:
+// Любой транспорт экспортирует две функции:
 //
 //   listen({ port, onConnection }) → Promise<TransportServer>
 //     Запускает сервер на всех сетевых интерфейсах. Для каждого нового
@@ -28,4 +28,19 @@
 // сокета и передаёт их в 'close'. Поэтому никакое действие клиента
 // не может уронить процесс через «unhandled 'error' event».
 
-export { connect, listen } from './tcp.js';
+import * as tcp from './tcp.js';
+import * as ws from './ws.js';
+
+const transports = { ws, tcp };
+
+export const TRANSPORT_NAMES = Object.keys(transports);
+export const DEFAULT_TRANSPORT = 'ws';
+
+/** Возвращает реализацию транспорта по имени ('ws' или 'tcp'). */
+export function getTransport(name = DEFAULT_TRANSPORT) {
+  const transport = transports[name];
+  if (!transport) {
+    throw new Error(`Unknown transport "${name}", expected one of: ${TRANSPORT_NAMES.join(', ')}`);
+  }
+  return transport;
+}

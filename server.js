@@ -3,16 +3,21 @@
 
 import { ChatServer } from './lib/chat-server.js';
 import { UsageError, parseOptions, parsePort, requireOption } from './lib/cli.js';
-import * as transport from './transport/index.js';
+import { DEFAULT_TRANSPORT, TRANSPORT_NAMES, getTransport } from './transport/index.js';
 
-const USAGE = 'Usage: node server.js --port <1-65535>';
+const USAGE = `Usage: node server.js --port <1-65535> [--transport ${TRANSPORT_NAMES.join('|')}]`;
 
 function parseServerArgs() {
   const values = parseOptions({
     port: { type: 'string' },
+    transport: { type: 'string', default: DEFAULT_TRANSPORT },
   });
+  if (!TRANSPORT_NAMES.includes(values.transport)) {
+    throw new UsageError(`Unknown transport "${values.transport}"`);
+  }
   return {
     port: parsePort(requireOption(values, 'port')),
+    transportName: values.transport,
   };
 }
 
@@ -49,6 +54,7 @@ async function main() {
 
   const logger = createLogger();
   const chat = new ChatServer({ logger });
+  const transport = getTransport(options.transportName);
 
   let server;
   try {
@@ -61,7 +67,7 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  logger.info(`Server listening on port ${server.port}`);
+  logger.info(`Server listening on port ${server.port} (transport: ${options.transportName})`);
 
   const stop = async () => {
     logger.info('Shutting down...');

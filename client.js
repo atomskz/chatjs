@@ -5,10 +5,10 @@ import { ChatClient } from './lib/chat-client.js';
 import { UsageError, parseOptions, parsePort, requireOption } from './lib/cli.js';
 import { TerminalUI } from './lib/terminal-ui.js';
 import { NICK_RULES, isValidNick } from './protocol.js';
-import * as transport from './transport/index.js';
+import { DEFAULT_TRANSPORT, TRANSPORT_NAMES, getTransport } from './transport/index.js';
 
 const USAGE = [
-  'Usage: node client.js --host <address> --port <1-65535> --nick <nickname>',
+  `Usage: node client.js --host <address> --port <1-65535> --nick <nickname> [--transport ${TRANSPORT_NAMES.join('|')}]`,
   `  nickname: ${NICK_RULES}`,
   'Example: node client.js --host 192.168.1.10 --port 5000 --nick alice',
 ].join('\n');
@@ -18,6 +18,7 @@ function parseClientArgs() {
     host: { type: 'string' },
     port: { type: 'string' },
     nick: { type: 'string' },
+    transport: { type: 'string', default: DEFAULT_TRANSPORT },
   });
 
   const host = requireOption(values, 'host');
@@ -26,7 +27,10 @@ function parseClientArgs() {
   if (!isValidNick(nick)) {
     throw new UsageError(`Invalid nickname "${nick}"`);
   }
-  return { host, port, nick };
+  if (!TRANSPORT_NAMES.includes(values.transport)) {
+    throw new UsageError(`Unknown transport "${values.transport}"`);
+  }
+  return { host, port, nick, transportName: values.transport };
 }
 
 function describeConnectError(error) {
@@ -57,7 +61,8 @@ async function main() {
     return;
   }
 
-  const { host, port, nick } = options;
+  const { host, port, nick, transportName } = options;
+  const transport = getTransport(transportName);
 
   let connection;
   try {
