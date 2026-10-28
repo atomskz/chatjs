@@ -1,39 +1,67 @@
-// Шаг 2: сервер рассылает всё полученное всем подключённым.
-// Проверка: откройте два-три wscat и пишите в любой из них.
+// Точка входа сервера: разбирает аргументы и связывает транспорт
+// с логикой чата. Сама логика — в lib/chat-server.js.
 
-import { parseArgs } from 'node:util';
-import { WebSocketServer } from 'ws';
+import { ChatServer } from './lib/chat-server.js';
+import { UsageError, parseOptions, parsePort, requireOption } from './lib/cli.js';
+import * as transport from './transport/index.js';
 
-const { values } = parseArgs({ options: { port: { type: 'string', default: '5000' } } });
-const port = Number(values.port);
+const USAGE = 'Usage: node server.js --port <1-65535>';
 
-// clientTracking: false — у библиотеки есть свой список клиентов,
-// но по ТЗ рассылку пишем сами, поэтому ведём собственный список.
-const wss = new WebSocketServer({ port, clientTracking: false });
-const clients = new Set();
+function parseServerArgs() {
+  const values = parseOptions({
+    port: { type: 'string' },
+  });
+  return {
+    port: parsePort(requireOption(values, 'port')),
+  };
+}
 
-function broadcast(text) {
-  for (const client of clients) {
-    client.send(text);
+function createLogger() {
+  const line = (level, text) => `${new Date().toISOString()} ${level.padEnd(5)} ${text}`;
+  return {
+    info: (text) => console.log(line('INFO', text)),
+    warn: (text) => console.warn(line('WARN', text)),
+    error: (text) => console.error(line('ERROR', text)),
+  };
+}
+
+function describeListenError(error, port) {
+  switch (error.code) {
+    case 'EADDRINUSE':
+      return `Port ${port} is already in use. Stop the other process or choose another port.`;
+    case 'EACCES':
+      return `No permission to listen on port ${port}. Try a port above 1024.`;
+    default:
+      return `Cannot start server on port ${port}: ${error.message}`;
   }
 }
 
-wss.on('listening', () => console.log(`Server listening on port ${port}`));
-wss.on('error', (error) => {
-  console.error(`Error: ${error.message}`);
-  process.exitCode = 1;
-});
+async function main() {
+  let options;
+  try {
+    options = parseServerArgs();
+  } catch (error) {
+    if (!(error instanceof UsageError)) throw error;
+    console.error(`Error: ${error.message}\n${USAGE}`);
+    process.exitCode = 1;
+    return;
+  }
 
-wss.on('connection', (socket, request) => {
-  const address = `${request.socket.remoteAddress}:${request.socket.remotePort}`;
-  console.log(`Connected: ${address}`);
-  clients.add(socket);
+  const logger = createLogger();
+  const chat = new ChatServer({ logger });
 
-  socket.on('message', (data) => broadcast(data.toString('utf8')));
-  // Без обработчика 'error' любая сетевая ошибка уронит весь сервер.
-  socket.on('error', (error) => console.error(`Error from ${address}: ${error.message}`));
-  socket.on('close', () => {
-    clients.delete(socket);
-    console.log(`Disconnected: ${address}`);
-  });
-});
+  let server;
+  try {
+    server = await transport.listen({
+      port: options.port,
+      onConnection: (connection) => chat.handleConnection(connection),
+    });
+  } catch (error) {
+    console.error(`Error: ${describeListenError(error, options.port)}`);
+    process.exitCode = 1;
+    return;
+  }
+  logger.info(`Server listening on port ${server.port}`);
+}
+
+main();
