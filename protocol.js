@@ -2,10 +2,17 @@
 // Этот модуль общий для сервера и клиента и ничего не знает о сети:
 // он превращает объекты в строки и обратно, а доставка строк — забота транспорта.
 
+const NICK_PATTERN = /^[A-Za-z0-9_-]{1,20}$/;
+export const NICK_RULES = '1-20 characters: latin letters, digits, "_" or "-"';
+
 /** Коды ошибок, которые сервер отправляет в сообщении `error`. */
 export const ErrorCode = {
   BAD_MESSAGE: 'BAD_MESSAGE', // не JSON или нет поля type
   UNKNOWN_TYPE: 'UNKNOWN_TYPE',
+  NOT_JOINED: 'NOT_JOINED', // сообщение до join
+  ALREADY_JOINED: 'ALREADY_JOINED',
+  INVALID_NICK: 'INVALID_NICK',
+  NICK_TAKEN: 'NICK_TAKEN',
 };
 
 /** Ошибка разбора входящего сообщения. */
@@ -22,13 +29,19 @@ export class ProtocolError extends Error {
 
 /** Сообщения клиент → сервер. */
 export const ClientMessage = {
+  join: (nick) => ({ type: 'join', nick }),
   msg: (text) => ({ type: 'msg', text }),
+  list: () => ({ type: 'list' }),
+  leave: () => ({ type: 'leave' }),
 };
 
 /** Сообщения сервер → клиент. */
 export const ServerMessage = {
+  welcome: (users) => ({ type: 'welcome', users }),
   error: (code, message) => ({ type: 'error', code, message }),
   msg: (from, text, ts = Date.now()) => ({ type: 'msg', from, text, ts }),
+  system: (text, ts = Date.now()) => ({ type: 'system', text, ts }),
+  users: (users) => ({ type: 'users', users }),
 };
 
 /** Объект сообщения → строка для отправки. */
@@ -58,4 +71,8 @@ export function decode(text) {
     );
   }
   return data;
+}
+
+export function isValidNick(nick) {
+  return typeof nick === 'string' && NICK_PATTERN.test(nick);
 }
