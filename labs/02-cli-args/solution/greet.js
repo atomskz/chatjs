@@ -1,4 +1,4 @@
-// Упражнение 2: разбор аргументов через util.parseArgs.
+// Упражнение 4: разбор аргументов через util.parseArgs.
 // Пример: node greet.js --name Ann --times 2 --shout
 
 import { parseArgs } from 'node:util';

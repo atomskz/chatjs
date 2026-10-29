@@ -26,24 +26,24 @@
 
 ## Программа
 
-| №   | лабораторная                               | о чём                                                     | шаг проекта                                |
-| --- | ------------------------------------------ | --------------------------------------------------------- | ------------------------------------------ |
-| 0   | [Рабочее окружение](00-environment/)       | терминал, пути, Node.js и REPL, ошибки, отладчик, git     | папка `~/js-labs` для всех песочниц        |
-| 1   | [Проект на Node.js](01-node-project/)      | npm, `package.json`, ES-модули, ESLint, Prettier          | заготовка проекта                          |
-| 2   | [Аргументы командной строки](02-cli-args/) | `process.argv`, `util.parseArgs`, stderr, коды выхода     | `lib/cli.js`                               |
-| 3   | [Ошибки и исключения](03-errors/)          | `try/catch`, свои классы ошибок, коды, граница ошибок     | обработка ошибок в `server.js`             |
-| 4   | [Асинхронность](04-async/)                 | таймеры, цикл событий, колбэки, Promise, `async/await`    | —                                          |
-| 5   | [События](05-events/)                      | EventEmitter, событие `error`, `events.once`, `events.on` | соединение в памяти для тестов             |
-| 6   | [JSON и протокол](06-protocol/)            | JSON, проверка входных данных, регулярки, длина строк     | `protocol.js`                              |
-| 7   | [Автотесты](07-testing/)                   | `node:test`, `assert`, асинхронные тесты, хуки            | тесты и `npm test`                         |
-| 8   | [Логика чата без сети](08-chat-logic/)     | классы, `#`-поля, `Map`, внедрение зависимостей           | `lib/chat-server.js` по ступеням           |
-| 9   | [Терминал](09-terminal/)                   | `readline`, вывод над строкой ввода, цвета, Ctrl+C        | `lib/terminal-ui.js`                       |
-| 10  | [TCP](10-tcp/)                             | `net`, порты и адреса, жизненный цикл соединения, ошибки  | `lib/errors.js`, `nc.js`                   |
-| 11  | [Поток байтов и фрейминг](11-framing/)     | `Buffer`, UTF-8, склейка и разрыв, NDJSON, префикс длины  | `transport/line-splitter.js`               |
-| 12  | [HTTP и WebSocket](12-websocket/)          | HTTP, рукопожатие WebSocket, библиотека `ws`              | —                                          |
-| 13  | [Транспорт как абстракция](13-transport/)  | контракт, адаптер, корень композиции, тесты контракта     | `transport/`, сервер в сети, `--transport` |
-| 14  | [Корректное завершение](14-shutdown/)      | что держит процесс, сигналы, выключение сервера           | выключение по Ctrl+C                       |
-| 15  | [Итоговая: собираем чат](15-chat/)         | конечный автомат клиента, приёмка по ТЗ                   | клиент, README, приёмка                    |
+| №   | лабораторная                               | о чём                                                     | шаг проекта                                 |
+| --- | ------------------------------------------ | --------------------------------------------------------- | ------------------------------------------- |
+| 0   | [Рабочее окружение](00-environment/)       | терминал, пути, Node.js и REPL, ошибки, отладчик, git     | папка `~/js-labs` для всех песочниц         |
+| 1   | [Проект на Node.js](01-node-project/)      | npm, `package.json`, ES-модули, ESLint, Prettier          | заготовка проекта                           |
+| 2   | [Аргументы командной строки](02-cli-args/) | `process.argv`, `util.parseArgs`, stderr, коды выхода     | `lib/cli.js`                                |
+| 3   | [Ошибки и исключения](03-errors/)          | `try/catch`, свои классы ошибок, коды, граница ошибок     | `lib/errors.js`, ошибки в `server.js`       |
+| 4   | [Асинхронность](04-async/)                 | таймеры, цикл событий, колбэки, Promise, `async/await`    | —                                           |
+| 5   | [События](05-events/)                      | EventEmitter, событие `error`, `events.once`, `events.on` | соединение в памяти для тестов              |
+| 6   | [JSON и протокол](06-protocol/)            | JSON, проверка входных данных, регулярки, длина строк     | `protocol.js`                               |
+| 7   | [Автотесты](07-testing/)                   | `node:test`, `assert`, асинхронные тесты, хуки            | тесты и `npm test`                          |
+| 8   | [Логика чата без сети](08-chat-logic/)     | классы, `#`-поля, `Map`, внедрение зависимостей           | `lib/chat-server.js` по ступеням            |
+| 9   | [Терминал](09-terminal/)                   | `readline`, вывод над строкой ввода, цвета, Ctrl+C        | `lib/terminal-ui.js`                        |
+| 10  | [TCP](10-tcp/)                             | `net`, порты и адреса, жизненный цикл соединения, ошибки  | `describeConnectError`, `nc.js` (песочница) |
+| 11  | [Поток байтов и фрейминг](11-framing/)     | `Buffer`, UTF-8, склейка и разрыв, NDJSON, префикс длины  | `transport/line-splitter.js`                |
+| 12  | [HTTP и WebSocket](12-websocket/)          | HTTP, рукопожатие WebSocket, библиотека `ws`              | —                                           |
+| 13  | [Транспорт как абстракция](13-transport/)  | контракт, адаптер, корень композиции, тесты контракта     | `transport/`, сервер в сети, `--transport`  |
+| 14  | [Корректное завершение](14-shutdown/)      | что держит процесс, сигналы, выключение сервера           | выключение по Ctrl+C                        |
+| 15  | [Итоговая: собираем чат](15-chat/)         | конечный автомат клиента, приёмка по ТЗ                   | клиент, README, приёмка                     |
 
 Лабораторные идут по порядку: каждая опирается на предыдущие.
 Зависимости указаны в начале каждой лабораторной в строке «Понадобится».
@@ -70,24 +70,24 @@
 
 Если вы работаете в PowerShell, вот замены:
 
-| bash                             | PowerShell                                    |
-| -------------------------------- | --------------------------------------------- |
-| `echo $?` (код выхода)           | `$LASTEXITCODE`                               |
-| `printf 'a\nb\n' \| node x.js`   | `"a", "b" \| node x.js`                       |
-| `node x.js < input.txt`          | `Get-Content input.txt \| node x.js`          |
-| `rm -rf node_modules`            | `Remove-Item -Recurse -Force node_modules`    |
-| `sleep 1`                        | `Start-Sleep 1`                               |
-| `curl -i http://localhost:5000/` | `curl.exe -i http://localhost:5000/`          |
-| `nc localhost 5000`              | `node nc.js localhost 5000` (лабораторная 10) |
+| bash                               | PowerShell                                                           |
+| ---------------------------------- | -------------------------------------------------------------------- |
+| `echo $?` (код выхода)             | `$LASTEXITCODE`                                                      |
+| `printf 'a\nb\n' \| node x.js`     | `"a", "b" \| node x.js`                                              |
+| `node x.js < input.txt`            | `Get-Content input.txt \| node x.js`                                 |
+| `rm -rf node_modules`              | `Remove-Item -Recurse -Force node_modules`                           |
+| `sleep 1`                          | `Start-Sleep 1`                                                      |
+| `a && b` (b — только при успехе a) | `a; if ($LASTEXITCODE -eq 0) { b }` (в PowerShell 7 работает и `&&`) |
+| `curl -i http://localhost:5000/`   | `curl.exe -i http://localhost:5000/`                                 |
+| `nc localhost 5000`                | `node nc.js localhost 5000` (лабораторная 10)                        |
 
-Три ловушки PowerShell:
+Четыре ловушки PowerShell:
 
 - в Windows PowerShell 5.1 `curl` — это другая команда (`Invoke-WebRequest`).
   Настоящий curl есть в Windows 10 и 11, его вызывают как `curl.exe`;
 - при передаче текста через `|` Windows PowerShell 5.1 может испортить кириллицу
   и эмодзи или добавить в начало невидимый символ BOM. Для упражнений
   с конвейером берите Git Bash или PowerShell 7 (`pwsh`);
-
 - если `npm` пишет «выполнение сценариев отключено в этой системе»,
   выполните один раз `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
   или вызывайте `npm.cmd` вместо `npm`;

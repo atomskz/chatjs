@@ -272,7 +272,8 @@ $ git diff --stat step-8 step-9
 слои разделены правильно.
 
 **Сколько файлов трогать, чтобы добавить третий транспорт.** Новый файл
-в `transport/` и одна строка в `transport/index.js`. Больше ничего: usage
+в `transport/` и две строки в `transport/index.js`: `import` и ключ
+в объекте `transports`. Больше ничего: usage
 в точках входа собирается из `TRANSPORT_NAMES` (`TRANSPORT_NAMES.join('|')` → `ws|tcp`),
 а тесты контракта и тесты чата перебирают `TRANSPORT_NAMES` сами.
 
@@ -343,7 +344,11 @@ await rm(folder, { recursive: true, force: true }); // удалить папку
   (`setTimeout(0)`);
 - `TcpConnection` — как в примере из теории: режет поток `LineSplitter`-ом
   и при слишком длинной строке уничтожает соединение с этой ошибкой;
-- `close()` сервера — `new Promise((resolve) => server.close(() => resolve()))`.
+- `close()` сервера — `new Promise((resolve) => server.close(() => resolve()))`;
+- `remoteAddress` соединения: на сервере — `ip:port` собеседника
+  (`${socket.remoteAddress}:${socket.remotePort}`), а у соединения, которое
+  вернул `connect`, — `tcp://host:port`. Клиент чата напечатает его
+  в строке `Connected to ...` (лабораторная 15).
 
 **Проверка:** временный скрипт поднимает `listen({ port: 0, onConnection })`,
 где `onConnection` отвечает эхом на каждое сообщение, подключается через
@@ -357,7 +362,8 @@ await rm(folder, { recursive: true, force: true }); // удалить папку
   создаётся после успешного `listen`, с `clientTracking: false`
   и `maxPayload`;
 - `connect` собирает URL `ws://host:port` (IPv6 — в скобках),
-  с `handshakeTimeout`;
+  с `handshakeTimeout`. Этот URL и есть `remoteAddress` соединения
+  у клиента, а на сервере — `ip:port` из `request.socket`;
 - `WsConnection.send` отправляет, только если сокет в состоянии `OPEN`;
 - `close()` соединения закрывает с кодом `1000` и через 2 секунды страхуется
   `terminate()` с `unref()`;
@@ -437,7 +443,9 @@ await rm(folder, { recursive: true, force: true }); // удалить папку
    `` `[--transport ${TRANSPORT_NAMES.join('|')}]` `` — список собирается сам,
    и при новом транспорте точку входа менять не придётся.
 
-4. **Соедините части** в `main()` сервера:
+4. **Соедините части** в `main()` сервера. Сделайте `main` асинхронной:
+   `async function main()` — внутри будет `await`. Вызов `main();` в конце
+   файла оставьте как есть.
 
    ```js
    // внутри async function main(), после разбора аргументов:
@@ -467,7 +475,8 @@ await rm(folder, { recursive: true, force: true }); // удалить папку
    через `npx wscat -c ws://localhost:5000` случаи из критериев приёмки ТЗ
    про мусорные сообщения (не JSON, JSON без `type`, `msg` до `join`).
    Затем запустите `node server.js --port 5000 --transport tcp` и проверьте
-   склейку из доп. задания 11.1 с помощью `nc.js` из лабораторной 10:
+   склейку из доп. задания 11.1 с помощью `nc.js` из лабораторной 10
+   (запускайте свой `nc.js` по его пути, например `node ../sandbox-10/nc.js`):
 
    ```bash
    printf '{"type":"join","nick":"nc"}\n{"type":"msg","text":"hi"}\n' | node nc.js localhost 5000
@@ -480,8 +489,10 @@ await rm(folder, { recursive: true, force: true }); // удалить папку
    `npm test`. Он использует `startChatServer` и `TestClient` из
    `test/helpers.js`. Если ваш `helpers.js` из лабораторной 8 отличается,
    **не заменяйте** его целиком: допишите в него `startChatServer`
-   из эталонного [test/helpers.js](../../test/helpers.js) и проверьте, что
-   у `TestClient` те же методы. Если файлы и контракт совпадают с эталонными,
+   из эталонного [test/helpers.js](../../test/helpers.js) вместе с тем, что
+   ей нужно, — в начале файла `import { ChatServer } from '../lib/chat-server.js';`
+   и `const silentLogger = { info() {}, warn() {}, error() {} };`. Проверьте,
+   что у `TestClient` те же методы. Если файлы и контракт совпадают с эталонными,
    тесты пройдут на обоих транспортах без правок.
 
    Исключение — тест выключения сервера (по одному на транспорт):

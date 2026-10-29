@@ -117,7 +117,8 @@ console.log(values, positionals);
   в `values` (`values.name === undefined`).
 - `positionals` — слова без флага. Без `allowPositionals: true` они запрещены.
 
-**Строгий режим.** С `strict: true` (так в проекте) `parseArgs` **выбрасывает
+**Строгий режим.** Строгий режим (`strict: true`) включён по умолчанию,
+в проекте его пишут явно, чтобы было видно. В нём `parseArgs` **выбрасывает
 исключение** на любой ошибке пользователя:
 
 | команда                           | сообщение                                                                      |
@@ -235,7 +236,9 @@ echo $?          # bash: код последней команды — 1
 напечатала ошибку, но вернула 0, цепочка пойдёт дальше, как будто всё хорошо.
 
 Посмотреть код последней команды: `echo $?` в bash, `$LASTEXITCODE`
-в PowerShell (там `$?` — это только `True`/`False`).
+в PowerShell (там `$?` — это только `True`/`False`). В Windows PowerShell 5.1
+оператора `&&` нет: цепочки из этой лабораторной запускайте в Git Bash
+или PowerShell 7 (`pwsh`).
 
 **Как задать код в Node.js.**
 
@@ -363,8 +366,10 @@ usage — это результат работы программы: он идё
 ### Упражнение 1. Что в `process.argv`
 
 Повторите пример 1.2 с аргументами `--port 5000 "two words" -x`. Сколько
-элементов получилось? Что сделали кавычки? Запустите тот же файл через
-скрипт npm с `--` и без него и сравните.
+элементов получилось? Что сделали кавычки? Добавьте в `package.json` скрипт
+`"argv": "node argv.js"` и сравните `npm run argv -- --port 5000`
+и `npm run argv --port 5000`. Во втором случае npm ещё и предупредит
+`Unknown cli config "--port"`: флаг достался самому npm.
 
 ### Упражнение 2. Проверка порта
 
@@ -433,7 +438,7 @@ usage — это результат работы программы: он идё
 В проекте `chat/` создайте `lib/cli.js` с общими помощниками для сервера
 и клиента:
 
-- `class UsageError extends Error {}`;
+- `class UsageError extends Error {}` — ошибка пользователя, а не баг;
 - `parseOptions(options)` — вызывает `parseArgs` с `strict: true`
   и возвращает объект `values`, а любую ошибку `parseArgs` превращает
   в `UsageError` с тем же текстом;
@@ -441,6 +446,15 @@ usage — это результат работы программы: он идё
   `UsageError('Option --<name> is required')`. Пустая строка (`--port=`)
   тоже считается отсутствующим значением;
 - `parsePort(value)` — из упражнения 2, но выбрасывает `UsageError`.
+
+Все четыре имени экспортируйте (`export class ...`, `export function ...`):
+их импортируют `server.js`, тесты (лабораторная 7) и клиент. `parseOptions`
+принимает только описание опций, например `parseOptions({ port: { type: 'string' } })`,
+и сама вызывает `parseArgs({ options, strict: true })`. В `server.js`:
+
+```js
+import { UsageError, parseOptions, parsePort, requireOption } from './lib/cli.js';
+```
 
 И заготовку `server.js` с функцией `main()` по шаблону из 2.3: она разбирает
 `--port` через эти помощники, при `UsageError` печатает в stderr `Error: ...`

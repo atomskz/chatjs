@@ -349,7 +349,8 @@ header.readUInt32BE(0); // прочитать 4 байта с позиции 0 �
 ## Шаг проекта
 
 Положите `LineSplitter` из упражнения 3 в `transport/line-splitter.js`,
-а его тесты — в `test/line-splitter.test.js`. Конструктор принимает
+а его тесты — в `test/line-splitter.test.js` и поменяйте в них импорт
+на `import { LineSplitter } from '../transport/line-splitter.js'`. Конструктор принимает
 `{ maxLineLength = 64 * 1024 }`. Убедитесь, что `npm test` проходит,
 и сделайте коммит. В лабораторной 13 на нём будет работать TCP-транспорт.
 

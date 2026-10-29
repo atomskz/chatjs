@@ -111,8 +111,10 @@ Node.js v24.19.0 on win32
 | `dependencies`    | пакеты, нужные программе для работы                     |
 | `devDependencies` | пакеты, нужные только разработчику (линтер, тесты)      |
 
-- Без `"type": "module"` (или с `"commonjs"`) файлы `.js` считаются
-  старым форматом CommonJS (о нём ниже). Расширение файла сильнее поля
+- С `"type": "commonjs"` файлы `.js` считаются старым форматом CommonJS
+  (о нём ниже). Если поля `type` нет вовсе, Node.js 24 сам замечает `import`
+  и запускает файл как ES-модуль, но печатает предупреждение
+  `MODULE_TYPELESS_PACKAGE_JSON`. Поэтому `type` всегда пишут явно. Расширение файла сильнее поля
   `type`: `.mjs` — всегда ES-модуль, `.cjs` — всегда CommonJS.
 - `engines` — подсказка, а не запрет: при неподходящей версии npm только
   предупредит, но установит пакеты.
@@ -319,7 +321,9 @@ math.js
 **Синтаксическая ошибка** останавливает оба инструмента. Сначала они
 разбирают текст программы в дерево (что здесь функция, что переменная),
 и только потом проверяют правила или печатают код заново. Если код не
-разбирается, дерева нет, и оба сообщают «Parsing error» и останавливаются.
+разбирается, дерева нет: ESLint пишет `Parsing error: ...`, Prettier —
+`SyntaxError: ...` для этого файла (остальные файлы он обработает). Пока
+синтаксис не исправлен, других ошибок в этом файле ESLint не покажет.
 
 ### Разминка 2
 
@@ -347,7 +351,8 @@ math.js
 
 1. Создайте `math.js` с функциями `sum(a, b)` и `average(numbers)`.
    Функция `average` должна использовать `sum`.
-2. Создайте `main.js`: импортируйте обе функции, а также `os`
+2. Создайте `main.js`: импортируйте `average` (а `sum` — только если
+   используете: ESLint ругается на неиспользуемый импорт), а также `os`
    из `node:os`, и выведите `average([2, 4, 9])` и `os.cpus().length`.
 3. Выведите `import.meta.dirname` и `import.meta.filename`.
 4. Проделайте все четыре поломки из разминки 1 и прочитайте каждую ошибку.
@@ -397,19 +402,19 @@ math.js
 
 ## Типичные ошибки
 
-| что видите                                                                                      | почему                                                       | что делать                                                          |
-| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------- |
-| `SyntaxError: Cannot use import statement outside a module`                                     | в `package.json` нет `"type": "module"` или там `"commonjs"` | `"type": "module"` (одно поле, без дубля)                           |
-| `ERR_MODULE_NOT_FOUND ... Did you mean to import "./math.js"?`                                  | в `import` нет расширения `.js`                              | `'./math.js'`                                                       |
-| `does not provide an export named 'Sum'`                                                        | имя в `{}` не совпадает с экспортом (регистр важен)          | взять точное имя или `{ sum as Sum }`                               |
-| `ReferenceError: require is not defined in ES module scope`                                     | код в стиле CommonJS в ES-модуле                             | `import ... from '...'`                                             |
-| `npm error Missing script: "hello"`                                                             | такого скрипта нет в `package.json` или вы в другой папке    | проверить `scripts` и `pwd`                                         |
-| `npm error code ENOENT ... package.json`                                                        | npm запущен вне папки проекта                                | `cd` в папку, где лежит `package.json`                              |
-| `eslint: command not found`                                                                     | пакет установлен в проект, а не в систему                    | `npm run lint` или `npx eslint .`                                   |
-| ESLint: `'process' is not defined`, `'console' is not defined`                                  | в настройке нет `globals: globals.node`                      | добавить `globals` в `eslint.config.js`                             |
-| `npm ci can only install packages when your package.json and package-lock.json ... are in sync` | `package.json` правили руками, а lock не обновили            | `npm install`, затем закоммитить оба файла                          |
-| в Windows `prettier --check` ругается на каждый файл                                            | git превратил переводы строк в CRLF                          | `.gitattributes` с `* text=auto eol=lf` (шаг проекта)               |
-| PowerShell: «выполнение сценариев отключено в этой системе»                                     | политика PowerShell запрещает `npm.ps1`                      | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` или `npm.cmd` |
+| что видите                                                                                      | почему                                                     | что делать                                                          |
+| ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------- |
+| `SyntaxError: Cannot use import statement outside a module`                                     | в `package.json` стоит `"type": "commonjs"`                | `"type": "module"` (одно поле, без дубля)                           |
+| `ERR_MODULE_NOT_FOUND ... Did you mean to import "./math.js"?`                                  | в `import` нет расширения `.js`                            | `'./math.js'`                                                       |
+| `does not provide an export named 'Sum'`                                                        | имя в `{}` не совпадает с экспортом (регистр важен)        | взять точное имя или `{ sum as Sum }`                               |
+| `ReferenceError: require is not defined in ES module scope`                                     | код в стиле CommonJS в ES-модуле                           | `import ... from '...'`                                             |
+| `npm error Missing script: "hello"`                                                             | такого скрипта нет в `package.json` или вы в другой папке  | проверить `scripts` и `pwd`                                         |
+| `npm error code ENOENT ... package.json`                                                        | npm запущен вне папки проекта                              | `cd` в папку, где лежит `package.json`                              |
+| `eslint: command not found`                                                                     | пакет установлен в проект, а не в систему                  | `npm run lint` или `npx eslint .`                                   |
+| ESLint: `'process' is not defined`, `'console' is not defined`                                  | в настройке нет `globals: globals.node`                    | добавить `globals` в `eslint.config.js`                             |
+| `npm ci can only install packages when your package.json and package-lock.json ... are in sync` | `package.json` правили руками, а lock не обновили          | `npm install`, затем закоммитить оба файла                          |
+| в Windows `prettier --check` ругается на каждый файл                                            | файлы с переводами строк CRLF (их создал редактор или git) | `.gitattributes` с `* text=auto eol=lf` (шаг проекта)               |
+| PowerShell: «выполнение сценариев отключено в этой системе»                                     | политика PowerShell запрещает `npm.ps1`                    | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` или `npm.cmd` |
 
 ## Шаг проекта
 
@@ -420,7 +425,11 @@ math.js
 - ESLint, Prettier и скрипты `lint`, `format`, `format:check`;
 - `.gitignore` с `node_modules/`;
 - `.gitattributes` со строкой `* text=auto eol=lf`. В Windows git может
-  превращать переводы строк в CRLF, и тогда Prettier ругается на каждый файл;
+  превращать переводы строк в CRLF, и тогда Prettier ругается на каждый файл.
+  Редактор в Windows тоже может сохранять новые файлы с CRLF: один раз
+  выполните `npm run format`, он перепишет их в LF. Чтобы VS Code сразу
+  писал LF, щёлкните `CRLF` внизу справа и выберите `LF` или добавьте
+  в настройки `"files.eol": "\n"`;
 - `git init` и первый коммит.
 
 **Проверка:** `npm run lint` и `npm run format:check` проходят без ошибок,

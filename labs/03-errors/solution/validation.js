@@ -1,4 +1,4 @@
-// Упражнения 2 и 5: свой класс ошибки, instanceof и cause.
+// Упражнения 3 и 4: свой класс ошибки, instanceof и cause.
 
 class ValidationError extends Error {
   constructor(field, message, options) {

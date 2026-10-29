@@ -1,4 +1,4 @@
-// Упражнение 1: подписка через on и once.
+// Упражнение 2: подписка через on и once.
 
 import { Ticker } from './ticker.js';
 

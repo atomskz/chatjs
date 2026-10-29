@@ -13,7 +13,7 @@
    включён.
 3. `{ shout: false }` и `positionals` — `['one', 'two']`: слова без флага
    попали в `positionals`, потому что в примере есть `allowPositionals: true`.
-   В строгом режиме без этой опции было бы `Unexpected argument 'one'`.
+   Без этой опции было бы `Unexpected argument 'one'`.
 
 ### Разминка 2
 

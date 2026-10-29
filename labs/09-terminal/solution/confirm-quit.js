@@ -1,4 +1,4 @@
-// Упражнение 5: свой обработчик Ctrl+C.
+// Упражнение 6: свой обработчик Ctrl+C.
 // Если на readline есть обработчик 'SIGINT', Ctrl+C больше не завершает процесс сам.
 
 import readline from 'node:readline';

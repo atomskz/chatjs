@@ -237,8 +237,9 @@ readFile('a.txt', 'utf8', (errorA, a) => {
 
 ### Разминка 2
 
-1. В примере с `readFile` поменяйте имя файла на несуществующее. Что
-   напечатается и в каком порядке?
+1. В первом примере с `readFile` замените `import.meta.filename`
+   на `'no-such-file.txt'` и добавьте в колбэк проверку `if (error)`
+   из второго примера. Что напечатается и в каком порядке?
 2. Почему в примере с `getName` напечаталось `undefined`, а не `'Ann'`?
 
 ---
@@ -453,11 +454,9 @@ async function load() {
   throw new Error('broken'); // то же, что вернуть Promise.reject(new Error('broken'))
 }
 
-try {
-  load(); // без await: исключения здесь нет, есть только отклонённый промис
-} catch {
-  console.log('never printed');
-}
+const promise = load(); // без await: исключения здесь нет, есть только отклонённый промис
+console.log(promise); // Promise { <rejected> Error: broken ... }
+promise.catch(() => {}); // без обработки отклонения процесс упал бы (см. 2.7)
 
 try {
   await load(); // с await отклонение снова становится исключением
@@ -642,7 +641,9 @@ console.log('H');
 Внутри создайте промис с таймером, который вызывает `reject`, и устройте
 `Promise.race` между ним и исходным промисом. В `.finally` вызовите
 `clearTimeout`, чтобы таймер не держал процесс, когда исходный промис
-уже выполнился. Ошибку с кодом можно создать так:
+уже выполнился. Объявите `let timer;` до `new Promise`, а внутри
+исполнителя присвойте `timer = setTimeout(...)`: переменная, объявленная
+внутри исполнителя, в `.finally` не видна. Ошибку с кодом можно создать так:
 `Object.assign(new Error('Timed out'), { code: 'ETIMEDOUT' })`.
 
 Затем напишите `timeout.js`, который:

@@ -63,7 +63,7 @@ JSON.parse('{"type":"msg","text":"hi"}'); // { type: 'msg', text: 'hi' }
 
 Если отправить объект без `JSON.stringify`, получится не то: `String(obj)`
 и шаблонная строка `` `${obj}` `` дают `'[object Object]'`, а `socket.write(obj)`
-вообще выбросит `TypeError: The "chunk" argument must be of type string or an instance of Buffer`.
+вообще выбросит `TypeError: The "chunk" argument must be of type string or an instance of Buffer, ...`.
 
 **JSON — это не JavaScript.** Чего в нём нет:
 
@@ -252,7 +252,7 @@ export const NICK_RULES = '1-20 characters: latin letters, digits, "_" or "-"';
 
 Константа защищает от опечаток. Но коварно: опечатка в имени константы
 (`ErrorCode.NIKC_TAKEN`) даёт `undefined`, а `JSON.stringify` такое поле
-**выбрасывает**. Клиент получит `{"type":"error","message":"..."}` вообще
+молча **пропускает**. Клиент получит `{"type":"error","message":"..."}` вообще
 без кода. Поэтому коды проверяют тестами (лабораторная 7).
 
 ### 2.3. Регулярные выражения
@@ -417,12 +417,19 @@ Code points (`[...text].length`) — простой, быстрый и стаб�
 - `class ProtocolError extends Error` с конструктором `(code, message)`,
   полями `name = 'ProtocolError'` и `code`. Порядок аргументов важен:
   сервер будет пересылать клиенту `error.code` и `error.message`;
-- `ClientMessage` (`join`, `msg`, `list`, `leave`) и `ServerMessage`
-  (`welcome`, `error`, `msg`, `system`, `users`) — конструкторы сообщений
-  по таблицам из 2.1;
+- `ClientMessage` и `ServerMessage` — конструкторы сообщений по таблицам
+  из 2.1, ровно с такими аргументами:
+  - `ClientMessage.join(nick)`, `msg(text)`, `list()`, `leave()`;
+  - `ServerMessage.welcome(users)`, `error(code, message)`,
+    `msg(from, text, ts = Date.now())`, `system(text, ts = Date.now())`,
+    `users(users)`. Сервер вызывает `system('...')` с одним аргументом,
+    а тесты проверяют, что `ts` — число;
+- все константы, классы и функции — именованные экспорты (`export`);
 - `encode(message)` и `decode(text)`. `decode` проверяет шаги 1–3 из 1.3
   и при ошибке **выбрасывает** `ProtocolError` с кодом `BAD_MESSAGE`
-  (в отличие от `safeParseMessage`, которая возвращает результат);
+  (в отличие от `safeParseMessage`, которая возвращает результат).
+  Тексты ошибок, как в эталоне: `'Message is not valid JSON'` (шаг 1)
+  и `'Message must be a JSON object with a string "type" field'` (шаги 2–3);
 - `isValidNick(nick)` — `true`, если это строка по правилу из упражнения 3;
 - `validateText(text)` — возвращает `null`, если текст в порядке, или
   описание проблемы (эти тексты проверяют тесты эталона):

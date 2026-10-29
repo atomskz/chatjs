@@ -1,4 +1,4 @@
-// Упражнения 1 и 3: TCP эхо-сервер на модуле net.
+// Упражнение 1: TCP эхо-сервер на модуле net.
 // node echo-server.js [port] [host]
 // Проверка: node client.js 127.0.0.1 5000 hello  (или nc localhost 5000)
 

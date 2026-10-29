@@ -443,18 +443,18 @@ AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
 
 ## Типичные ошибки
 
-| что видите                                                                                     | почему                                                                 | что делать                                                    |
-| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `TypeError: Cannot read private member #clients from an object whose class did not declare it` | метод передан без вызова: `on('message', this.#handle)`                | `on('message', (text) => this.#handle(connection, text))`     |
-| `SyntaxError: Private field '#x' must be declared in an enclosing class`                       | поле `#x` не объявлено в классе или к нему обращаются снаружи          | объявить `#x;` в начале класса; снаружи — только через методы |
-| `TypeError: logger.log is not a function`                                                      | у тестового логгера только `info`, `warn`, `error`                     | вызывать `this.#logger.info(...)`                             |
-| в `Map` «пропадают» клиенты или все ники `undefined`                                           | вместо `Map` обычный объект — ключи-соединения слиплись                | `new Map()`                                                   |
-| ответ `INTERNAL_ERROR` вместо `BAD_MESSAGE`                                                    | ошибку `decode` поймала общая граница, а не свой `try` вокруг `decode` | маленький `try/catch` вокруг `decode` (ступень 1)             |
-| новичок получил «X joined the chat» о самом себе                                               | `#broadcast` без `except: connection`                                  | передать `{ except: connection }`                             |
-| «left the chat» о том, кто так и не вошёл                                                      | нет проверки, что у клиента был ник                                    | рассылать, только если `client.nick`                          |
-| тест завис и упал: `test timed out after ...`                                                  | сервер не отправил ответ, которого ждёт тест                           | найти, на какой запрос нет `#send`                            |
-| `Connection closed before a message arrived`                                                   | сервер закрыл соединение раньше, чем ответил                           | сначала `#sendError`, потом `connection.close()`              |
-| тест проходит один, но падает вместе с другими                                                 | тесты делят один сервер или одно состояние                             | новый `ChatServer` в каждом тесте (`createChat()`)            |
+| что видите                                                                                                                                                       | почему                                                                 | что делать                                                    |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `TypeError: Cannot read private member #clients from an object whose class did not declare it` или `TypeError: Receiver must be an instance of class ChatServer` | метод передан без вызова: `on('message', this.#handle)`                | `on('message', (text) => this.#handle(connection, text))`     |
+| `SyntaxError: Private field '#x' must be declared in an enclosing class`                                                                                         | поле `#x` не объявлено в классе или к нему обращаются снаружи          | объявить `#x;` в начале класса; снаружи — только через методы |
+| `TypeError: logger.log is not a function`                                                                                                                        | у тестового логгера только `info`, `warn`, `error`                     | вызывать `this.#logger.info(...)`                             |
+| в `Map` «пропадают» клиенты или все ники `undefined`                                                                                                             | вместо `Map` обычный объект — ключи-соединения слиплись                | `new Map()`                                                   |
+| ответ `INTERNAL_ERROR` вместо `BAD_MESSAGE`                                                                                                                      | ошибку `decode` поймала общая граница, а не свой `try` вокруг `decode` | маленький `try/catch` вокруг `decode` (ступень 1)             |
+| новичок получил «X joined the chat» о самом себе                                                                                                                 | `#broadcast` без `except: connection`                                  | передать `{ except: connection }`                             |
+| «left the chat» о том, кто так и не вошёл                                                                                                                        | нет проверки, что у клиента был ник                                    | рассылать, только если `client.nick`                          |
+| тест завис и упал: `test timed out after ...`                                                                                                                    | сервер не отправил ответ, которого ждёт тест                           | найти, на какой запрос нет `#send`                            |
+| `Connection closed before a message arrived`                                                                                                                     | сервер закрыл соединение раньше, чем ответил                           | сначала `#sendError`, потом `connection.close()`              |
+| тест проходит один, но падает вместе с другими                                                                                                                   | тесты делят один сервер или одно состояние                             | новый `ChatServer` в каждом тесте (`createChat()`)            |
 
 ## Шаг проекта
 
@@ -468,8 +468,10 @@ AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
 ### Порядок работы на каждой ступени
 
 1. Скопируйте тест ступени в `chat/test/`.
-2. Запустите **только его**: `node --test test/chat-server-1-errors.test.js`.
+2. Запустите **только его**:
+   `node --test --test-timeout=10000 test/chat-server-1-errors.test.js`.
    Так вывод короче, и видно только то, что относится к этой ступени.
+   Без `--test-timeout` тест, который ждёт ответа, будет висеть бесконечно.
 3. Прочитайте **первый** упавший тест так, как в разделе 2.2: какая проверка,
    что ждали, что получили, какая строка теста. Исправляйте по одной ошибке.
 4. Когда ступень зелёная, запустите `npm test`: тесты прошлых ступеней тоже
@@ -602,6 +604,11 @@ try {
 `#broadcast` проходит по `#clients` и отправляет только тем, у кого `nick !== null`.
 Сообщение кодируется один раз до цикла.
 
+Тесты этой ступени проверяют ответ сервера через `list`, поэтому сразу
+добавьте в `switch` ветку `case 'list'`:
+`this.#send(connection, ServerMessage.users(this.#getNicks()))`. Подробнее
+о `list` — в ступени 3.
+
 ### Ступень 3. Сообщения и список
 
 Тест: [chat-server-3-messages.test.js](tests/chat-server-3-messages.test.js).
@@ -609,7 +616,8 @@ try {
 - `msg`: `validateText(text)` вернул проблему — `INVALID_TEXT` с этим текстом.
   Иначе — `#broadcast(ServerMessage.msg(client.nick, text))` всем, включая
   отправителя. `from` и `ts` из входящего сообщения не используются;
-- `list`: `ServerMessage.users(this.#getNicks())` только этому клиенту.
+- `list`: `ServerMessage.users(this.#getNicks())` только этому клиенту
+  (если вы уже добавили его на ступени 2, здесь ничего делать не нужно).
 
 ### Ступень 4. Выход и обрыв
 
@@ -628,7 +636,12 @@ try {
   (лабораторная 5). В `catch` — `logger.error` со стеком (`error.stack`)
   и ответ `INTERNAL_ERROR` с текстом `'Internal server error'`;
 - логи: `info` при подключении (с `connection.remoteAddress`), при входе
-  (с ником) и при отключении; `warn` в `#sendError` для каждой ошибки,
+  (с ником) и при отключении. Тест ищет в логе подключения строку
+  `fake-client` — это `remoteAddress` серверного конца из `fake-connection.js`
+  (лабораторная 5). Удобные тексты, как в эталоне: `Connected: <адрес>`,
+  `Joined: <ник> (<адрес>)`, `Disconnected: <ник> (<адрес>)` и, если транспорт
+  передал ошибку в `close(error)`, ещё `: <error.message>`; в `#sendError` —
+  `warn` с текстом `Error <код> for <адрес>: <текст>`; `warn` в `#sendError` для каждой ошибки,
   отправленной клиенту (с кодом).
 
 Когда все пять тестов проходят, логика сервера готова. Эталон —

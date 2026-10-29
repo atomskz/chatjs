@@ -39,5 +39,6 @@ test('after errors the connection still works', async () => {
   const client = createChat().connect();
   client.sendRaw('garbage');
   await client.next();
-  assert.equal((await client.join('ann')).type, 'welcome');
+  client.send({ type: 'list' });
+  assert.equal((await client.next()).code, 'NOT_JOINED');
 });

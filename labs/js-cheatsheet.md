@@ -220,6 +220,9 @@ class Ticker extends EventEmitter {
 
   start() {} // метод
   #tick() {} // закрытый метод
+  get isRunning() {
+    return this.#timer !== null; // геттер: читается как поле, ticker.isRunning, без скобок
+  }
   static create() {} // метод самого класса: Ticker.create()
 }
 ```

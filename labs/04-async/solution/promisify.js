@@ -1,4 +1,4 @@
-// Упражнение 6: три способа получить промис из callback-API.
+// Упражнение 8: четыре способа прочитать файл — колбэк и три способа получить промис.
 
 import { readFile } from 'node:fs';
 import { readFile as readFilePromise } from 'node:fs/promises';

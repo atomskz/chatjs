@@ -225,15 +225,19 @@ node hello.js Ann    # Hello, Ann!
 Вот что печатает Node.js, если вызвать переменную с опечаткой в имени:
 
 ```
-file:///C:/Users/ann/js-labs/sandbox-00/average.js:12   ← файл и строка
+C:\Users\ann\js-labs\sandbox-00\average.js:12        ← файл и строка
   return totl / numbers.length;                          ← сама строка
   ^                                                      ← место ошибки
 
 ReferenceError: totl is not defined                      ← вид и текст ошибки
-    at average (file:///.../average.js:12:3)             ← стек вызовов: где случилось
-    at file:///.../average.js:15:25                      ← ...и откуда туда пришли
-    at ModuleJob.run (node:internal/...)                 ← внутренности Node.js — пропускаем
+    at average (C:\...\average.js:12:3)                  ← стек вызовов: где случилось
+    at Object.<anonymous> (C:\...\average.js:15:25)      ← ...и откуда туда пришли
+    at Module._compile (node:internal/...)               ← внутренности Node.js — пропускаем
 ```
+
+В Linux и macOS путь будет вида `/home/ann/js-labs/...`. В проектах
+с `"type": "module"` (с лабораторной 1) путь начинается с `file:///`,
+а внутренние строки Node.js называются иначе — читать их всё равно не нужно.
 
 Как читать, по шагам:
 
@@ -369,7 +373,8 @@ git log --oneline                 # 2 коммита, новые сверху
 ### Упражнение 1. Своё рабочее место
 
 Создайте папку `~/js-labs/` — в ней будут все песочницы лабораторных.
-Откройте её в VS Code (`code ~/js-labs`) и откройте встроенный терминал.
+Откройте её в VS Code (`code ~/js-labs`, в PowerShell — `code $HOME\js-labs`)
+и откройте встроенный терминал.
 Убедитесь, что `pwd` во встроенном терминале показывает эту папку.
 
 ### Упражнение 2. Первая программа

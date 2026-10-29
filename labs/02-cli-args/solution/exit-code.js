@@ -1,4 +1,4 @@
-// Упражнение 4: process.exit() против process.exitCode.
+// Упражнение 3: process.exit() против process.exitCode.
 // node exit-code.js exit  — «cleanup done» не напечатается
 // node exit-code.js code  — напечатается, а код выхода всё равно 1
 

@@ -1,4 +1,4 @@
-// Упражнение 4: finally выполняется всегда — и после return, и после throw.
+// Упражнение 2: finally выполняется всегда — и после return, и после throw.
 
 function withResource(action) {
   console.log('  open');
